@@ -81,14 +81,11 @@ st.markdown("""
         border-color: #EF553B !important;
     }
     
-    /* 8. NAV BAR FIX (THE NUCLEAR OPTION) */
-    /* This hides the top header bar INSIDE the sidebar. 
-       This removes the Close (X) button and the Maximize (Box) button.
-       Users must click the overlay (main screen) to close the menu on mobile. */
+    /* 8. NAV BAR FIX (Targeted Strike) */
+    /* Hides ONLY the header bar inside the sidebar (where the close button lives) */
     section[data-testid="stSidebar"] .st-emotion-cache-10oheav {
         display: none !important;
     }
-    /* Backup selector for different Streamlit versions */
     div[data-testid="stSidebarHeader"] {
         display: none !important;
     }
@@ -100,33 +97,32 @@ st.markdown("""
     
     /* 10. ROSTER DELETE BUTTON STYLING */
     button[kind="secondary"] {
-        padding: 0px 8px !important;
+        padding: 0px !important;
         border: 1px solid #EF553B !important;
         color: #EF553B !important;
         background-color: transparent !important;
         border-radius: 4px !important;
-        font-size: 14px !important;
+        font-size: 16px !important;
         height: 32px !important;
+        width: 32px !important;
         line-height: 1 !important;
+        display: flex;
+        align-items: center;
+        justify-content: center;
     }
     button[kind="secondary"]:hover {
         background-color: #EF553B !important;
         color: white !important;
     }
     
-    /* 11. PLAYER CARD STYLING */
-    .player-card {
-        background-color: rgba(255, 255, 255, 0.05);
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        border-radius: 6px;
-        padding: 10px;
-        margin-bottom: 8px;
-    }
-
-    /* 12. MOBILE TWEAKS */
+    /* 11. MOBILE TWEAKS */
     @media (max-width: 768px) {
         section[data-testid="stSidebar"] {
             width: 85% !important; 
+        }
+        /* Fix Chart Text Size on Mobile */
+        .js-plotly-plot .plotly .g-gtitle {
+            font-size: 14px !important;
         }
     }
     
@@ -287,6 +283,8 @@ def render_projections_content(week):
             st.subheader(f"📊 Range of Outcomes (Top 20)")
             top_20 = filtered_df.head(20)
             
+            # --- IMPROVED CHART FOR MOBILE ---
+            # Moved legend to top to save vertical space
             fig = px.scatter(
                 top_20, x="projected_score", y="player_name", 
                 error_x="std_dev", error_x_minus="std_dev",
@@ -299,7 +297,20 @@ def render_projections_content(week):
                 },
                 title="Projected Score +/- 1 Std Dev"
             )
-            fig.update_layout(yaxis={'categoryorder':'total ascending'}, height=600, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', font_color="#F5F7FA")
+            fig.update_layout(
+                yaxis={'categoryorder':'total ascending'}, 
+                height=650, # Slightly taller for better touch targets
+                plot_bgcolor='rgba(0,0,0,0)', 
+                paper_bgcolor='rgba(0,0,0,0)',
+                font_color="#F5F7FA",
+                legend=dict(
+                    orientation="h",
+                    yanchor="bottom",
+                    y=1.02,
+                    xanchor="right",
+                    x=1
+                )
+            )
             st.plotly_chart(fig, use_container_width=True)
             st.info("ℹ️ **Note:** 'Confidence' measures **Predictability**, not Talent. A 'Volatile Star' (Low Confidence) is a great player who has had some inconsistent games recently.")
         else:
@@ -339,15 +350,18 @@ elif mode == "⚔️ Matchup Sim":
 
         # --- LEFT COLUMN: YOUR TEAM ---
         with col1:
-            # UPDATED SCOREBOARD BANNER (Includes Ceiling)
+            # SLIM BANNER
             st.markdown(f"""
-            <div style="background-color: rgba(0, 168, 232, 0.15); border-left: 5px solid #00A8E8; border-radius: 4px; padding: 15px; margin-bottom: 20px;">
-                <h4 style="margin:0; color: #00A8E8; font-weight: 600;">YOUR TEAM</h4>
-                <div style="display: flex; align-items: baseline; gap: 10px;">
-                    <h1 style="margin:0; font-size: 2.8rem; color: white;">{my_proj:.1f}</h1>
-                </div>
-                <div style="font-size: 0.85rem; color: #ccc; margin-top: 4px;">
-                    Floor: <b>{my_floor:.1f}</b> | Ceiling: <b>{my_ceil:.1f}</b>
+            <div style="background-color: rgba(0, 168, 232, 0.15); border-left: 4px solid #00A8E8; border-radius: 4px; padding: 10px; margin-bottom: 15px;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                        <h5 style="margin:0; color: #00A8E8; font-size: 0.9rem;">YOUR TEAM</h5>
+                        <h2 style="margin:0; font-size: 1.8rem; color: white;">{my_proj:.1f}</h2>
+                    </div>
+                    <div style="text-align: right; font-size: 0.8rem; color: #ccc;">
+                        <div>Flr: <b>{my_floor:.1f}</b></div>
+                        <div>Ceil: <b>{my_ceil:.1f}</b></div>
+                    </div>
                 </div>
             </div>
             """, unsafe_allow_html=True)
@@ -365,40 +379,48 @@ elif mode == "⚔️ Matchup Sim":
                 
                 st.markdown("<br>", unsafe_allow_html=True)
                 for index, row in my_team_df.iterrows():
-                    # CONTAINER FOR CARD LOOK
+                    # HYBRID ROW: HTML for Text (Left), Streamlit Column for Button (Right)
+                    # This guarantees the text never stacks awkwardly
                     with st.container():
-                        st.markdown('<div class="player-card">', unsafe_allow_html=True)
-                        c_name, c_stats, c_del = st.columns([0.40, 0.45, 0.15])
+                        c_info, c_del = st.columns([0.85, 0.15])
                         
-                        with c_name:
-                            st.markdown(f"**{row['player_name']}**")
-                            st.caption(f"{row['position']}")
-                            
-                        with c_stats:
-                            # Improved Layout with Explicit Labels
-                            st.markdown(f"Proj: <b style='font-size:1.1em;'>{row['projected_score']:.1f}</b>", unsafe_allow_html=True)
-                            # Using HTML for tighter control on sub-text
-                            st.markdown(f"<span style='font-size:0.8em; color:#ccc;'>Flr: <b>{row['range_low']:.0f}</b> | Ceil: <b>{row['range_high']:.0f}</b></span>", unsafe_allow_html=True)
+                        with c_info:
+                            st.markdown(f"""
+                            <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.05); padding: 8px; border-radius: 4px; margin-bottom: 4px;">
+                                <div>
+                                    <div style="font-weight: bold; font-size: 14px;">{row['player_name']}</div>
+                                    <div style="font-size: 11px; color: #aaa;">{row['position']}</div>
+                                </div>
+                                <div style="text-align: right;">
+                                    <div style="font-weight: bold; font-size: 16px; color: #fff;">{row['projected_score']:.1f}</div>
+                                    <div style="font-size: 10px; color: #aaa;">{row['range_low']:.0f}-{row['range_high']:.0f}</div>
+                                </div>
+                            </div>
+                            """, unsafe_allow_html=True)
                             
                         with c_del:
+                            # Vertically align the button to match the text box height
+                            st.write("") # Spacer
                             if st.button("✕", key=f"rem_my_{row['player_name']}"):
                                 st.session_state.my_team_roster.remove(row['player_name'])
                                 st.rerun()
-                        st.markdown('</div>', unsafe_allow_html=True)
             else:
                 st.info("Roster is empty.")
 
         # --- RIGHT COLUMN: OPPONENT ---
         with col2:
-            # UPDATED SCOREBOARD BANNER (Red Theme)
+            # SLIM BANNER (Red)
             st.markdown(f"""
-            <div style="background-color: rgba(239, 85, 59, 0.15); border-left: 5px solid #EF553B; border-radius: 4px; padding: 15px; margin-bottom: 20px;">
-                <h4 style="margin:0; color: #EF553B; font-weight: 600;">OPPONENT</h4>
-                <div style="display: flex; align-items: baseline; gap: 10px;">
-                    <h1 style="margin:0; font-size: 2.8rem; color: white;">{opp_proj:.1f}</h1>
-                </div>
-                <div style="font-size: 0.85rem; color: #ccc; margin-top: 4px;">
-                    Floor: <b>{opp_floor:.1f}</b> | Ceiling: <b>{opp_ceil:.1f}</b>
+            <div style="background-color: rgba(239, 85, 59, 0.15); border-left: 4px solid #EF553B; border-radius: 4px; padding: 10px; margin-bottom: 15px;">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                        <h5 style="margin:0; color: #EF553B; font-size: 0.9rem;">OPPONENT</h5>
+                        <h2 style="margin:0; font-size: 1.8rem; color: white;">{opp_proj:.1f}</h2>
+                    </div>
+                    <div style="text-align: right; font-size: 0.8rem; color: #ccc;">
+                        <div>Flr: <b>{opp_floor:.1f}</b></div>
+                        <div>Ceil: <b>{opp_ceil:.1f}</b></div>
+                    </div>
                 </div>
             </div>
             """, unsafe_allow_html=True)
@@ -417,19 +439,25 @@ elif mode == "⚔️ Matchup Sim":
                 st.markdown("<br>", unsafe_allow_html=True)
                 for index, row in opp_team_df.iterrows():
                     with st.container():
-                        st.markdown('<div class="player-card">', unsafe_allow_html=True)
-                        c_name, c_stats, c_del = st.columns([0.40, 0.45, 0.15])
-                        with c_name:
-                            st.markdown(f"**{row['player_name']}**")
-                            st.caption(f"{row['position']}")
-                        with c_stats:
-                            st.markdown(f"Proj: <b style='font-size:1.1em;'>{row['projected_score']:.1f}</b>", unsafe_allow_html=True)
-                            st.markdown(f"<span style='font-size:0.8em; color:#ccc;'>Flr: <b>{row['range_low']:.0f}</b> | Ceil: <b>{row['range_high']:.0f}</b></span>", unsafe_allow_html=True)
+                        c_info, c_del = st.columns([0.85, 0.15])
+                        with c_info:
+                            st.markdown(f"""
+                            <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.05); padding: 8px; border-radius: 4px; margin-bottom: 4px;">
+                                <div>
+                                    <div style="font-weight: bold; font-size: 14px;">{row['player_name']}</div>
+                                    <div style="font-size: 11px; color: #aaa;">{row['position']}</div>
+                                </div>
+                                <div style="text-align: right;">
+                                    <div style="font-weight: bold; font-size: 16px; color: #fff;">{row['projected_score']:.1f}</div>
+                                    <div style="font-size: 10px; color: #aaa;">{row['range_low']:.0f}-{row['range_high']:.0f}</div>
+                                </div>
+                            </div>
+                            """, unsafe_allow_html=True)
                         with c_del:
+                            st.write("")
                             if st.button("✕", key=f"rem_opp_{row['player_name']}"):
                                 st.session_state.opp_team_roster.remove(row['player_name'])
                                 st.rerun()
-                        st.markdown('</div>', unsafe_allow_html=True)
             else:
                 st.info("Roster is empty.")
         
@@ -511,6 +539,7 @@ elif mode == "📉 Performance Audit":
             c3.metric("Avg Error", f"{df['error'].abs().mean():.1f} pts")
             c4.metric("Bias", f"{df['error'].mean():.1f} pts")
 
+            # Improved Chart for Audit (Legend on top)
             fig = px.scatter(
                 df, x="projected_score", y="actual_score", 
                 color="position", hover_data=['player_name', 'error'],
@@ -518,7 +547,13 @@ elif mode == "📉 Performance Audit":
                 color_discrete_sequence=["#00A8E8", "#EF553B", "#B0B0B0", "#FFFFFF"] 
             )
             fig.add_shape(type="line", x0=0, y0=0, x1=40, y1=40, line=dict(color="#B0B0B0", dash="dash"))
-            fig.update_layout(plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', font_color="#F5F7FA")
+            fig.update_layout(
+                plot_bgcolor='rgba(0,0,0,0)', 
+                paper_bgcolor='rgba(0,0,0,0)', 
+                font_color="#F5F7FA",
+                height=500,
+                legend=dict(orientation="h", y=1.1)
+            )
             st.plotly_chart(fig, use_container_width=True)
 
             st.subheader("📉 The 'Whiff' List (Biggest Misses)")
