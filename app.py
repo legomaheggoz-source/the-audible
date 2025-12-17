@@ -48,7 +48,13 @@ st.markdown("""
     /* 5. MAIN AREA TEXT STYLING (White) */
     .main .block-container, .main h1, .main h2, .main h3, .main h4, .main h5, .main p, .main span, .main div, [data-testid="stMetricLabel"] {
         color: #F5F7FA !important;
-        opacity: 1 !important; /* Force full visibility on mobile */
+        opacity: 1 !important;
+    }
+    
+    /* FORCE ALL WIDGET LABELS TO WHITE (Mobile Fix) */
+    label, .stSelectbox label, .stMultiSelect label, .stSlider label {
+        color: #FFFFFF !important;
+        opacity: 1 !important;
     }
     
     /* FORCE WHITE TEXT FOR CAPTIONS GLOBALLY */
@@ -88,7 +94,7 @@ st.markdown("""
         border-color: #EF553B !important;
     }
     
-    /* 8. NAV BAR FIX (Targeted Strike) */
+    /* 8. NAV BAR FIX */
     section[data-testid="stSidebar"] .st-emotion-cache-10oheav {
         display: none !important;
     }
@@ -109,12 +115,13 @@ st.markdown("""
         background-color: transparent !important;
         border-radius: 4px !important;
         font-size: 16px !important;
-        height: 38px !important; 
+        height: 58px !important; /* MATCH THE PLAYER CARD HEIGHT */
         width: 100% !important;
         line-height: 1 !important;
         display: flex;
         align-items: center;
         justify-content: center;
+        margin-top: 0px !important;
     }
     button[kind="secondary"]:hover {
         background-color: #EF553B !important;
@@ -141,7 +148,6 @@ st.markdown("""
             color: #ddd !important;
             opacity: 1 !important;
         }
-        /* Fix header visibility specifically on mobile */
         h1, h2, h3, h4, h5 {
             color: #FFFFFF !important;
             opacity: 1 !important;
@@ -379,7 +385,7 @@ elif mode == "⚔️ Matchup Sim":
             </div>
             """, unsafe_allow_html=True)
 
-            c_add, c_btn = st.columns([0.80, 0.20], gap="small")
+            c_add, c_btn = st.columns([3, 1], gap="small")
             with c_add:
                 new_player = st.selectbox("Add Player", options=["Select..."] + player_list, key="my_add", label_visibility="collapsed")
             with c_btn:
@@ -394,27 +400,25 @@ elif mode == "⚔️ Matchup Sim":
                 
                 st.markdown("<br>", unsafe_allow_html=True)
                 for index, row in my_team_df.iterrows():
+                    # UPDATED RATIO: [3, 1] to match the Add Player button alignment
                     with st.container():
-                        # Using gap="small" to force tighter alignment
-                        c_info, c_del = st.columns([0.80, 0.20], gap="small")
+                        c_info, c_del = st.columns([3, 1], gap="small")
                         
                         with c_info:
-                            # Added explicit labels 'Floor:' and 'Ceil:'
                             st.markdown(f"""
-                            <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.05); padding: 8px; border-radius: 4px; margin-bottom: 4px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.05); padding: 8px; border-radius: 4px; height: 42px;">
                                 <div>
                                     <div class="player-row-text" style="font-weight: bold; font-size: 14px;">{row['player_name']}</div>
                                     <div class="player-row-subtext" style="font-size: 11px; color: #aaa;">{row['position']}</div>
                                 </div>
                                 <div style="text-align: right;">
                                     <div class="player-row-text" style="font-weight: bold; font-size: 16px;">{row['projected_score']:.1f}</div>
-                                    <div class="player-row-subtext" style="font-size: 10px; color: #aaa;">Floor: {row['range_low']:.0f} | Ceil: {row['range_high']:.0f}</div>
+                                    <div class="player-row-subtext" style="font-size: 10px; color: #aaa;">Flr: {row['range_low']:.0f} | Ceil: {row['range_high']:.0f}</div>
                                 </div>
                             </div>
                             """, unsafe_allow_html=True)
                             
                         with c_del:
-                            st.write("") 
                             if st.button("✕", key=f"rem_my_{row['player_name']}"):
                                 st.session_state.my_team_roster.remove(row['player_name'])
                                 st.rerun()
@@ -438,7 +442,7 @@ elif mode == "⚔️ Matchup Sim":
             </div>
             """, unsafe_allow_html=True)
 
-            c_add_opp, c_btn_opp = st.columns([0.80, 0.20], gap="small")
+            c_add_opp, c_btn_opp = st.columns([3, 1], gap="small")
             with c_add_opp:
                 new_opp = st.selectbox("Add Player", options=["Select..."] + player_list, key="opp_add", label_visibility="collapsed")
             with c_btn_opp:
@@ -454,22 +458,21 @@ elif mode == "⚔️ Matchup Sim":
                 st.markdown("<br>", unsafe_allow_html=True)
                 for index, row in opp_team_df.iterrows():
                     with st.container():
-                        c_info, c_del = st.columns([0.80, 0.20], gap="small")
+                        c_info, c_del = st.columns([3, 1], gap="small")
                         with c_info:
                             st.markdown(f"""
-                            <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.05); padding: 8px; border-radius: 4px; margin-bottom: 4px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.05); padding: 8px; border-radius: 4px; height: 42px;">
                                 <div>
                                     <div class="player-row-text" style="font-weight: bold; font-size: 14px;">{row['player_name']}</div>
                                     <div class="player-row-subtext" style="font-size: 11px; color: #aaa;">{row['position']}</div>
                                 </div>
                                 <div style="text-align: right;">
                                     <div class="player-row-text" style="font-weight: bold; font-size: 16px;">{row['projected_score']:.1f}</div>
-                                    <div class="player-row-subtext" style="font-size: 10px; color: #aaa;">Floor: {row['range_low']:.0f} | Ceil: {row['range_high']:.0f}</div>
+                                    <div class="player-row-subtext" style="font-size: 10px; color: #aaa;">Flr: {row['range_low']:.0f} | Ceil: {row['range_high']:.0f}</div>
                                 </div>
                             </div>
                             """, unsafe_allow_html=True)
                         with c_del:
-                            st.write("")
                             if st.button("✕", key=f"rem_opp_{row['player_name']}"):
                                 st.session_state.opp_team_roster.remove(row['player_name'])
                                 st.rerun()
