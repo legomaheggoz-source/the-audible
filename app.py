@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 import sqlite3
 import plotly.express as px
-import plotly.graph_objects as go
 import os
 import datetime
 import pytz
@@ -88,13 +87,19 @@ st.markdown("""
         display: none !important;
     }
     
-    /* 9. MOBILE SPECIFIC FIXES */
+    /* 9. MOBILE SPECIFIC FIXES (The "Box" Killer) */
     @media (max-width: 768px) {
-        button[data-testid="stSidebarCollapseButton"] {
+        /* This targets the "Maximize" button specifically */
+        [data-testid="baseButton-headerNoPadding"] {
             display: none !important;
         }
+        /* This targets the SVG icon itself just in case */
+        button[kind="header"] {
+            display: none !important;
+        }
+        
         section[data-testid="stSidebar"] {
-            width: 80% !important; 
+            width: 85% !important; 
         }
     }
     
@@ -209,7 +214,7 @@ st.sidebar.image("logo.png", use_container_width=True)
 
 mode = st.sidebar.radio(
     "Navigation", 
-    ["🔮 Live Projections", "⚔️ H2H Matchup", "📜 Projection History", "📉 Performance Audit"]
+    ["🔮 Live Projections", "⚔️ Matchup Sim", "📜 Projection History", "📉 Performance Audit"]
 )
 
 # --- REUSABLE PROJECTION CONTENT ---
@@ -285,16 +290,13 @@ if mode == "🔮 Live Projections":
     st.title(f"Week {CURRENT_WEEK} Projections")
     render_projections_content(CURRENT_WEEK)
 
-# --- PAGE 2: H2H MATCHUP ---
-elif mode == "⚔️ H2H Matchup":
-    st.title(f"Week {CURRENT_WEEK} H2H Projections")
+# --- PAGE 2: MATCHUP SIM ---
+elif mode == "⚔️ Matchup Sim":
+    st.title(f"Week {CURRENT_WEEK} Matchup Sim")
     
-    # Load all projections for the search bars
     all_projections = load_projections(CURRENT_WEEK)
     
     if not all_projections.empty:
-        # Create a list of names for the dropdown
-        # Sort alphabetically for easier searching
         player_list = sorted(all_projections['player_name'].unique().tolist())
         
         col1, col2 = st.columns(2)
@@ -302,68 +304,95 @@ elif mode == "⚔️ H2H Matchup":
         # --- LEFT COLUMN: YOUR TEAM ---
         with col1:
             st.subheader("Your Team")
-            # Multiselect acts as the search bar + list builder
-            my_team_names = st.multiselect("Select Your Starters", player_list, key="my_team_search")
+            my_team_names = st.multiselect("Select Starters", player_list, key="my_team_search")
             
             if my_team_names:
-                # Filter DF for selected players
                 my_team_df = all_projections[all_projections['player_name'].isin(my_team_names)]
                 
-                # Calculate Totals
-                my_proj = my_team_df['projected_score'].sum()
-                my_floor = my_team_df['range_low'].sum()
-                my_ceil = my_team_df['range_high'].sum()
+                # Create Display Table
+                display_df = my_team_df[['player_name', 'range_low', 'projected_score', 'range_high']].copy()
                 
-                # Display Scoreboard
-                st.metric("Total Projection", f"{my_proj:.1f}", delta=None)
-                c_a, c_b = st.columns(2)
-                c_a.metric("Floor", f"{my_floor:.1f}")
-                c_b.metric("Ceiling", f"{my_ceil:.1f}")
-                
-                # Display List
                 st.dataframe(
-                    my_team_df[['player_name', 'position', 'projected_score']],
+                    display_df,
                     hide_index=True,
-                    use_container_width=True
+                    use_container_width=True,
+                    column_config={
+                        "player_name": "Player",
+                        "range_low": st.column_config.NumberColumn("Floor", format="%.1f"),
+                        "projected_score": st.column_config.NumberColumn("Proj", format="%.1f"),
+                        "range_high": st.column_config.NumberColumn("Ceil", format="%.1f"),
+                    }
                 )
+                
+                # TOTALS ROW
+                st.markdown("---")
+                c1, c2, c3 = st.columns(3)
+                c1.metric("Total Floor", f"{my_team_df['range_low'].sum():.1f}")
+                c2.metric("Total Proj", f"{my_team_df['projected_score'].sum():.1f}")
+                c3.metric("Total Ceil", f"{my_team_df['range_high'].sum():.1f}")
             else:
-                st.info("Search and add players to build your roster.")
+                st.info("Build your roster.")
 
         # --- RIGHT COLUMN: OPPONENT ---
         with col2:
             st.subheader("Opponent")
-            opp_team_names = st.multiselect("Select Opponent Starters", player_list, key="opp_team_search")
+            opp_team_names = st.multiselect("Select Opponent", player_list, key="opp_team_search")
             
             if opp_team_names:
                 opp_team_df = all_projections[all_projections['player_name'].isin(opp_team_names)]
                 
-                opp_proj = opp_team_df['projected_score'].sum()
-                opp_floor = opp_team_df['range_low'].sum()
-                opp_ceil = opp_team_df['range_high'].sum()
-                
-                st.metric("Total Projection", f"{opp_proj:.1f}", delta=None)
-                c_a, c_b = st.columns(2)
-                c_a.metric("Floor", f"{opp_floor:.1f}")
-                c_b.metric("Ceiling", f"{opp_ceil:.1f}")
+                display_df_opp = opp_team_df[['player_name', 'range_low', 'projected_score', 'range_high']].copy()
                 
                 st.dataframe(
-                    opp_team_df[['player_name', 'position', 'projected_score']],
+                    display_df_opp,
                     hide_index=True,
-                    use_container_width=True
+                    use_container_width=True,
+                    column_config={
+                        "player_name": "Player",
+                        "range_low": st.column_config.NumberColumn("Floor", format="%.1f"),
+                        "projected_score": st.column_config.NumberColumn("Proj", format="%.1f"),
+                        "range_high": st.column_config.NumberColumn("Ceil", format="%.1f"),
+                    }
                 )
+                
+                # TOTALS ROW
+                st.markdown("---")
+                c1, c2, c3 = st.columns(3)
+                c1.metric("Total Floor", f"{opp_team_df['range_low'].sum():.1f}")
+                c2.metric("Total Proj", f"{opp_team_df['projected_score'].sum():.1f}")
+                c3.metric("Total Ceil", f"{opp_team_df['range_high'].sum():.1f}")
             else:
-                st.info("Search and add players to build opponent roster.")
+                st.info("Build opponent roster.")
         
         # --- COMPARISON CHART ---
         if my_team_names and opp_team_names:
             st.divider()
-            st.subheader("⚔️ The Tale of the Tape")
             
-            # Simple bar chart comparing totals
+            my_proj = all_projections[all_projections['player_name'].isin(my_team_names)]['projected_score'].sum()
+            opp_proj = all_projections[all_projections['player_name'].isin(opp_team_names)]['projected_score'].sum()
+            
+            # Simple Win Probability Calculation (Heuristic)
+            diff = my_proj - opp_proj
+            if diff > 0:
+                color = "green"
+                msg = f"🏆 You are projected to win by {diff:.1f} points!"
+            else:
+                color = "red"
+                msg = f"⚠️ You are projected to lose by {abs(diff):.1f} points."
+                
+            st.markdown(f"<h3 style='text-align: center; color: {color};'>{msg}</h3>", unsafe_allow_html=True)
+            
             comp_data = {
                 "Team": ["You", "You", "You", "Opponent", "Opponent", "Opponent"],
                 "Metric": ["Floor", "Projection", "Ceiling", "Floor", "Projection", "Ceiling"],
-                "Score": [my_floor, my_proj, my_ceil, opp_floor, opp_proj, opp_ceil]
+                "Score": [
+                    all_projections[all_projections['player_name'].isin(my_team_names)]['range_low'].sum(),
+                    my_proj,
+                    all_projections[all_projections['player_name'].isin(my_team_names)]['range_high'].sum(),
+                    all_projections[all_projections['player_name'].isin(opp_team_names)]['range_low'].sum(),
+                    opp_proj,
+                    all_projections[all_projections['player_name'].isin(opp_team_names)]['range_high'].sum()
+                ]
             }
             comp_df = pd.DataFrame(comp_data)
             
@@ -375,12 +404,13 @@ elif mode == "⚔️ H2H Matchup":
             fig.update_layout(
                 plot_bgcolor='rgba(0,0,0,0)', 
                 paper_bgcolor='rgba(0,0,0,0)', 
-                font_color="#F5F7FA"
+                font_color="#F5F7FA",
+                height=400
             )
             st.plotly_chart(fig, use_container_width=True)
 
     else:
-        st.error("No projections available for H2H.")
+        st.error("No projections available for Matchup Sim.")
 
 # --- PAGE 3: PROJECTION HISTORY ---
 elif mode == "📜 Projection History":
