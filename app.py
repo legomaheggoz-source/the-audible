@@ -87,7 +87,6 @@ st.markdown("""
     }
     
     /* 9. ROSTER DELETE BUTTON STYLING */
-    /* Makes the 'X' button small, red, and minimal */
     button[kind="secondary"] {
         padding: 0px 8px !important;
         border: 1px solid #EF553B !important;
@@ -105,7 +104,6 @@ st.markdown("""
     
     /* 10. MOBILE SPECIFIC TWEAKS */
     @media (max-width: 768px) {
-        /* We removed the aggressive header hider so the menu comes back */
         section[data-testid="stSidebar"] {
             width: 85% !important; 
         }
@@ -303,10 +301,33 @@ elif mode == "⚔️ Matchup Sim":
         player_list = sorted(all_projections['player_name'].unique().tolist())
         col1, col2 = st.columns(2)
         
+        # --- PRE-CALCULATE TOTALS FOR HEADERS ---
+        my_proj = 0.0
+        my_floor = 0.0
+        my_ceil = 0.0
+        if st.session_state.my_team_roster:
+            temp_df = all_projections[all_projections['player_name'].isin(st.session_state.my_team_roster)]
+            my_proj = temp_df['projected_score'].sum()
+            my_floor = temp_df['range_low'].sum()
+            my_ceil = temp_df['range_high'].sum()
+
+        opp_proj = 0.0
+        opp_floor = 0.0
+        opp_ceil = 0.0
+        if st.session_state.opp_team_roster:
+            temp_df_opp = all_projections[all_projections['player_name'].isin(st.session_state.opp_team_roster)]
+            opp_proj = temp_df_opp['projected_score'].sum()
+            opp_floor = temp_df_opp['range_low'].sum()
+            opp_ceil = temp_df_opp['range_high'].sum()
+
         # --- LEFT COLUMN: YOUR TEAM ---
         with col1:
-            st.subheader("Your Team")
-            
+            # HEADER WITH SCORE
+            c_h1, c_h2 = st.columns([2, 1])
+            c_h1.subheader("Your Team")
+            c_h2.metric("Proj", f"{my_proj:.1f}")
+
+            # ROSTER UI
             c_add, c_btn = st.columns([3, 1])
             new_player = c_add.selectbox("Add Player", options=["Select..."] + player_list, key="my_add", label_visibility="collapsed")
             if c_btn.button("Add", key="btn_add_my"):
@@ -321,39 +342,34 @@ elif mode == "⚔️ Matchup Sim":
                 st.markdown("---")
                 for index, row in my_team_df.iterrows():
                     with st.container():
-                        # CHANGED RATIO: [3, 2, 1] - Tighter stats column
-                        c_name, c_stats, c_del = st.columns([3, 2, 1])
+                        # ADJUSTED LAYOUT: More space for Name and Stats labels
+                        c_name, c_stats, c_del = st.columns([2.5, 3.5, 0.5])
                         
                         with c_name:
                             st.write(f"**{row['player_name']}**")
                             st.caption(f"{row['position']}")
                             
                         with c_stats:
+                            # Explicit labels on new lines or clearly separated
                             st.write(f"Proj: **{row['projected_score']:.1f}**")
-                            st.caption(f"{row['range_low']:.0f} - {row['range_high']:.0f}")
+                            st.caption(f"Floor: {row['range_low']:.1f} | Ceil: {row['range_high']:.1f}")
                             
                         with c_del:
                             if st.button("✕", key=f"rem_my_{row['player_name']}"):
                                 st.session_state.my_team_roster.remove(row['player_name'])
                                 st.rerun()
-                        
                         st.divider() 
-
-                # TOTALS
-                my_floor = my_team_df['range_low'].sum()
-                my_proj = my_team_df['projected_score'].sum()
-                my_ceil = my_team_df['range_high'].sum()
-                
-                st.markdown(f"**Total Projection: {my_proj:.1f}**")
-                st.caption(f"Floor: {my_floor:.1f} | Ceiling: {my_ceil:.1f}")
-
             else:
                 st.info("Roster is empty.")
 
         # --- RIGHT COLUMN: OPPONENT ---
         with col2:
-            st.subheader("Opponent")
-            
+            # HEADER WITH SCORE
+            c_oh1, c_oh2 = st.columns([2, 1])
+            c_oh1.subheader("Opponent")
+            c_oh2.metric("Proj", f"{opp_proj:.1f}")
+
+            # ROSTER UI
             c_add_opp, c_btn_opp = st.columns([3, 1])
             new_opp = c_add_opp.selectbox("Add Player", options=["Select..."] + player_list, key="opp_add", label_visibility="collapsed")
             if c_btn_opp.button("Add", key="btn_add_opp"):
@@ -368,7 +384,7 @@ elif mode == "⚔️ Matchup Sim":
                 st.markdown("---")
                 for index, row in opp_team_df.iterrows():
                     with st.container():
-                        c_name, c_stats, c_del = st.columns([3, 2, 1])
+                        c_name, c_stats, c_del = st.columns([2.5, 3.5, 0.5])
                         
                         with c_name:
                             st.write(f"**{row['player_name']}**")
@@ -376,22 +392,13 @@ elif mode == "⚔️ Matchup Sim":
                             
                         with c_stats:
                             st.write(f"Proj: **{row['projected_score']:.1f}**")
-                            st.caption(f"{row['range_low']:.0f} - {row['range_high']:.0f}")
+                            st.caption(f"Floor: {row['range_low']:.1f} | Ceil: {row['range_high']:.1f}")
                             
                         with c_del:
                             if st.button("✕", key=f"rem_opp_{row['player_name']}"):
                                 st.session_state.opp_team_roster.remove(row['player_name'])
                                 st.rerun()
-                        
                         st.divider()
-
-                opp_floor = opp_team_df['range_low'].sum()
-                opp_proj = opp_team_df['projected_score'].sum()
-                opp_ceil = opp_team_df['range_high'].sum()
-                
-                st.markdown(f"**Total Projection: {opp_proj:.1f}**")
-                st.caption(f"Floor: {opp_floor:.1f} | Ceiling: {opp_ceil:.1f}")
-
             else:
                 st.info("Roster is empty.")
         
