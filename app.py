@@ -214,15 +214,28 @@ def get_season_correlations():
 # --- DIAGNOSTIC TOOL ---
 def check_missing_players(week):
     conn = sqlite3.connect(DB_NAME)
-    query_players = "SELECT player_id, player_name, position, team FROM players WHERE position IN ('QB','RB','WR','TE')"
-    df_players = pd.read_sql(query_players, conn)
-    query_proj = f"SELECT player_id FROM predictions_history WHERE season = {CURRENT_SEASON} AND week = {week}"
-    df_proj = pd.read_sql(query_proj, conn)
-    conn.close()
-    
-    if df_players.empty: return pd.DataFrame()
-    missing = df_players[~df_players['player_id'].isin(df_proj['player_id'])]
-    return missing
+    try:
+        # Check if players table exists and get data
+        query_players = "SELECT player_id, player_name, position, team FROM players WHERE position IN ('QB','RB','WR','TE')"
+        df_players = pd.read_sql(query_players, conn)
+        
+        # Get projections
+        query_proj = f"SELECT player_id FROM predictions_history WHERE season = {CURRENT_SEASON} AND week = {week}"
+        df_proj = pd.read_sql(query_proj, conn)
+        
+        conn.close()
+        
+        if df_players.empty: 
+            return pd.DataFrame()
+
+        # Find players IN players table but NOT IN projections
+        missing = df_players[~df_players['player_id'].isin(df_proj['player_id'])]
+        return missing
+
+    except Exception:
+        # If table is missing or DB is locked, fail silently so the app doesn't crash
+        conn.close()
+        return pd.DataFrame()
 
 # --- SIDEBAR CONTENT ---
 st.sidebar.image("logo.png", use_container_width=True) 
