@@ -28,19 +28,20 @@ st.markdown("""
         background-color: #F5F7FA;
     }
     
-    /* 3. SHIFT SIDEBAR CONTENT UP */
+    /* 3. ADJUST SIDEBAR CONTENT SPACING (Logo Fix) */
+    /* Pushed down to align with the main header bar break */
     section[data-testid="stSidebar"] > div {
-        padding-top: 1rem;
+        padding-top: 2rem; 
     }
     [data-testid="stSidebarUserContent"] {
-        padding-top: 0rem;
-        margin-top: -2rem; 
+        padding-top: 1rem; /* Added padding */
+        margin-top: 0rem;  /* Removed negative margin */
     }
     [data-testid="stSidebarNav"] {
-        padding-top: 0rem;
+        padding-top: 1rem;
     }
     
-    /* 4. SIDEBAR TEXT STYLING */
+    /* 4. SIDEBAR TEXT STYLING (Dark Navy) */
     [data-testid="stSidebar"] * {
         color: #0B1E33 !important;
     }
@@ -51,7 +52,7 @@ st.markdown("""
         opacity: 1 !important;
     }
     
-    /* FORCE ALL WIDGET LABELS TO WHITE */
+    /* FORCE ALL WIDGET LABELS TO WHITE (Mobile Fix) */
     label, .stSelectbox label, .stMultiSelect label, .stSlider label {
         color: #FFFFFF !important;
         opacity: 1 !important;
@@ -99,14 +100,14 @@ st.markdown("""
     div[data-testid="stSidebarHeader"] { display: none !important; }
     div[data-testid="stSidebarResizeHandle"] { display: none !important; }
     
-    /* 9. PREMIUM BUTTON STYLING (The "Nice" Buttons) */
+    /* 9. PREMIUM BUTTON STYLING */
     div.stButton > button {
         width: 100% !important;
         border: 1px solid rgba(255, 255, 255, 0.2);
         background-color: rgba(255, 255, 255, 0.05);
         color: white;
         height: 42px !important;
-        border-radius: 8px !important; /* Softer corners */
+        border-radius: 8px !important;
         transition: all 0.2s ease;
         margin-top: 0px !important;
     }
@@ -120,7 +121,7 @@ st.markdown("""
     button[kind="secondary"] {
         border: 1px solid rgba(239, 85, 59, 0.5) !important;
         color: #EF553B !important;
-        border-radius: 50% !important; /* Circle shape */
+        border-radius: 50% !important; 
         width: 32px !important;
         height: 32px !important;
         padding: 0 !important;
@@ -135,39 +136,42 @@ st.markdown("""
         border-color: #EF553B !important;
     }
     
-    /* 11. PLAYER ROW TEXT VISIBILITY (The "White" Fix) */
+    /* 11. PLAYER ROW TEXT VISIBILITY */
     .player-row-text {
         font-weight: 600 !important;
-        color: #FFFFFF !important; /* Force Pure White */
+        color: #FFFFFF !important;
         opacity: 1 !important;
     }
     .player-row-subtext {
         font-size: 11px !important;
-        color: #DDDDDD !important; /* Very Light Grey */
+        color: #DDDDDD !important;
         opacity: 1 !important;
     }
 
-    /* 12. MOBILE TWEAKS & NO-STACK FIX */
+    /* 12. MOBILE TWEAKS & STRICT ROW LAYOUT */
     @media (max-width: 768px) {
         section[data-testid="stSidebar"] { width: 85% !important; }
         
-        /* Force Plotly Title Visibility */
         .js-plotly-plot .plotly .g-gtitle {
             font-size: 14px !important;
             fill: #FFFFFF !important;
             opacity: 1 !important;
         }
         
-        /* THE MAGIC FIX: Prevent Columns from Stacking on Mobile */
-        /* This targets the horizontal block containing the player row and delete button */
-        [data-testid="column"] {
-            width: auto !important;
-            flex: 1 !important;
+        /* THIS PREVENTS THE DELETE BUTTON FROM DROPPING TO THE NEXT LINE */
+        [data-testid="stHorizontalBlock"] {
+            flex-wrap: nowrap !important;
+            align-items: center !important;
         }
-        /* Ensure the Delete button column doesn't get squished */
-        [data-testid="column"]:nth-of-type(2) {
-            flex: 0 0 40px !important; /* Fixed width for the button column */
-            min-width: 40px !important;
+        
+        /* Ensure columns maintain their ratio */
+        [data-testid="column"] {
+            flex-shrink: 0 !important;
+        }
+        
+        h1, h2, h3, h4, h5 {
+            color: #FFFFFF !important;
+            opacity: 1 !important;
         }
     }
     
@@ -363,7 +367,7 @@ elif mode == "⚔️ Matchup Sim":
     
     if not all_projections.empty:
         player_list = sorted(all_projections['player_name'].unique().tolist())
-        col1, col2 = st.columns(2, gap="medium") 
+        col1, col2 = st.columns(2, gap="large") 
         
         # --- PRE-CALCULATE TOTALS ---
         my_proj, my_floor, my_ceil = 0.0, 0.0, 0.0
@@ -390,14 +394,14 @@ elif mode == "⚔️ Matchup Sim":
                         <h2 style="margin:0; font-size: 1.8rem; color: white;">{my_proj:.1f}</h2>
                     </div>
                     <div style="text-align: right; font-size: 0.8rem; color: #ccc;">
-                        <div>Flr: <b>{my_floor:.1f}</b></div>
-                        <div>Ceil: <b>{my_ceil:.1f}</b></div>
+                        <div>Floor: <b>{my_floor:.1f}</b></div>
+                        <div>Ceiling: <b>{my_ceil:.1f}</b></div>
                     </div>
                 </div>
             </div>
             """, unsafe_allow_html=True)
 
-            c_add, c_btn = st.columns([0.8, 0.2], gap="small")
+            c_add, c_btn = st.columns([3, 1], gap="small")
             with c_add:
                 new_player = st.selectbox("Add Player", options=["Select..."] + player_list, key="my_add", label_visibility="collapsed")
             with c_btn:
@@ -413,7 +417,6 @@ elif mode == "⚔️ Matchup Sim":
                 st.markdown("<br>", unsafe_allow_html=True)
                 for index, row in my_team_df.iterrows():
                     with st.container():
-                        # MOBILE FIX: Use same ratio [0.8, 0.2] to force side-by-side
                         c_info, c_del = st.columns([0.8, 0.2], gap="small")
                         
                         with c_info:
@@ -425,7 +428,7 @@ elif mode == "⚔️ Matchup Sim":
                                 </div>
                                 <div style="text-align: right;">
                                     <div class="player-row-text" style="font-weight: bold; font-size: 16px;">{row['projected_score']:.1f}</div>
-                                    <div class="player-row-subtext" style="font-size: 10px; color: #aaa;">Flr: {row['range_low']:.0f} | Ceil: {row['range_high']:.0f}</div>
+                                    <div class="player-row-subtext" style="font-size: 10px; color: #aaa;">Floor: {row['range_low']:.0f} | Ceiling: {row['range_high']:.0f}</div>
                                 </div>
                             </div>
                             """, unsafe_allow_html=True)
@@ -447,14 +450,14 @@ elif mode == "⚔️ Matchup Sim":
                         <h2 style="margin:0; font-size: 1.8rem; color: white;">{opp_proj:.1f}</h2>
                     </div>
                     <div style="text-align: right; font-size: 0.8rem; color: #ccc;">
-                        <div>Flr: <b>{opp_floor:.1f}</b></div>
-                        <div>Ceil: <b>{opp_ceil:.1f}</b></div>
+                        <div>Floor: <b>{opp_floor:.1f}</b></div>
+                        <div>Ceiling: <b>{opp_ceil:.1f}</b></div>
                     </div>
                 </div>
             </div>
             """, unsafe_allow_html=True)
 
-            c_add_opp, c_btn_opp = st.columns([0.8, 0.2], gap="small")
+            c_add_opp, c_btn_opp = st.columns([3, 1], gap="small")
             with c_add_opp:
                 new_opp = st.selectbox("Add Player", options=["Select..."] + player_list, key="opp_add", label_visibility="collapsed")
             with c_btn_opp:
@@ -480,7 +483,7 @@ elif mode == "⚔️ Matchup Sim":
                                 </div>
                                 <div style="text-align: right;">
                                     <div class="player-row-text" style="font-weight: bold; font-size: 16px;">{row['projected_score']:.1f}</div>
-                                    <div class="player-row-subtext" style="font-size: 10px; color: #aaa;">Flr: {row['range_low']:.0f} | Ceil: {row['range_high']:.0f}</div>
+                                    <div class="player-row-subtext" style="font-size: 10px; color: #aaa;">Floor: {row['range_low']:.0f} | Ceiling: {row['range_high']:.0f}</div>
                                 </div>
                             </div>
                             """, unsafe_allow_html=True)
