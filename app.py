@@ -4,7 +4,8 @@ import sqlite3
 import plotly.express as px
 import os
 import datetime
-import pytz  # <--- New library for Timezone
+import pytz
+import numpy as np
 from config import CURRENT_WEEK, CURRENT_SEASON, DB_NAME 
 
 # Page Config
@@ -12,7 +13,7 @@ st.set_page_config(
     page_title="The Audible", 
     page_icon="🏈", 
     layout="wide",
-    initial_sidebar_state="auto"  # <--- CHANGED: "auto" collapses sidebar on mobile
+    initial_sidebar_state="auto"
 )
 
 # --- THEME OVERRIDE (CSS INJECTION) ---
@@ -51,18 +52,12 @@ st.markdown("""
     }
 
     /* 6. DROPDOWN GLOBAL ENFORCER (Mobile & Desktop) */
-    /* Forces the popup menu background to Dark Navy */
     div[data-baseweb="popover"], div[data-baseweb="menu"] {
         background-color: #152a45 !important;
     }
-    
-    /* Forces ALL text inside the popup menu to be White */
-    /* This catches list items, "No Results" text, and loading states */
     div[data-baseweb="menu"] * {
         color: white !important;
     }
-    
-    /* The Closed Box container */
     div[data-baseweb="select"] > div {
         background-color: #152a45 !important;
         border-color: #444 !important;
@@ -74,8 +69,6 @@ st.markdown("""
     div[data-baseweb="select"] svg {
         fill: white !important;
     }
-    
-    /* Hover State for Menu Items */
     ul[data-testid="stSelectboxVirtualDropdown"] li:hover {
         background-color: #26466D !important;
     }
@@ -89,6 +82,12 @@ st.markdown("""
         border-color: #EF553B !important;
     }
     
+    /* 8. MOBILE UX FIXES */
+    /* Hides the "resize handle" so you can't accidentally drag the sidebar to full screen */
+    div[data-testid="stSidebarResizeHandle"] {
+        display: none !important;
+    }
+    
     /* Dataframes */
     [data-testid="stDataFrame"] {
         background-color: #152a45;
@@ -98,16 +97,11 @@ st.markdown("""
 
 # --- HELPER FUNCTIONS ---
 def get_last_updated():
-    """Gets the last modification time of the database and converts to ET"""
     try:
         timestamp = os.path.getmtime(DB_NAME)
-        # 1. Get the time in UTC (Universal Time)
         dt_utc = datetime.datetime.fromtimestamp(timestamp, datetime.timezone.utc)
-        
-        # 2. Convert to US/Eastern Time
         tz_eastern = pytz.timezone('US/Eastern')
         dt_eastern = dt_utc.astimezone(tz_eastern)
-        
         return dt_eastern.strftime("%b %d, %I:%M %p ET") 
     except:
         return "Unknown"
@@ -124,14 +118,38 @@ def load_projections(week):
     conn.close()
     
     if not df.empty:
-        if 'confidence_label' not in df.columns:
-            df['confidence_label'] = df['confidence_score'].apply(get_confidence_label)
+        # 1. CLEAN NEGATIVES (Floor/Ceiling/Score cannot be < 0)
+        cols_to_clip = ['projected_score', 'range_low', 'range_high']
+        for col in cols_to_clip:
+            if col in df.columns:
+                df[col] = df[col].clip(lower=0)
+
+        # 2. FILL MISSING RANGES
         if 'std_dev' in df.columns:
-            df['range_low'] = (df['projected_score'] - df['std_dev']).clip(lower=0)
-            df['range_high'] = df['projected_score'] + df['std_dev']
-        else:
-            df['range_low'] = df['projected_score']
-            df['range_high'] = df['projected_score']
+            # If std_dev is missing, assume 0
+            df['std_dev'] = df['std_dev'].fillna(0)
+            
+            # Calculate ranges if not present
+            if 'range_low' not in df.columns:
+                df['range_low'] = (df['projected_score'] - df['std_dev']).clip(lower=0)
+            if 'range_high' not in df.columns:
+                df['range_high'] = df['projected_score'] + df['std_dev']
+        
+        # 3. FIX "ONE-HIT WONDERS" (The Jawhar Jordan Rule)
+        # If Floor == Ceiling (std_dev is 0), it implies sample size = 1.
+        # We force their Confidence Score to 0 to prevent them from showing as "Safe".
+        # We also create a flag to potentially hide them.
+        
+        # Identify rows where range is zero (or very close to zero)
+        zero_variance_mask = (df['range_high'] - df['range_low']) < 0.1
+        
+        # Tank their confidence score
+        df.loc[zero_variance_mask, 'confidence_score'] = 0
+        df.loc[zero_variance_mask, 'risk_tier'] = "Insufficient Data"
+        
+        # 4. Generate Confidence Labels based on the NEW scores
+        df['confidence_label'] = df['confidence_score'].apply(get_confidence_label)
+
     return df
 
 def load_actuals(week):
@@ -162,6 +180,9 @@ def get_season_correlations():
     conn.close()
     
     if df.empty: return {}
+    
+    # FILTER: Remove any rows where projection is <= 0 (as requested)
+    df = df[df['projected_score'] > 0]
     
     correlations = {}
     for pos in ['QB', 'RB', 'WR', 'TE']:
@@ -198,7 +219,14 @@ def render_projections_content(week):
     df = load_projections(week)
     
     if not df.empty:
+        # Filter Logic:
+        # 1. Position Match
+        # 2. Confidence >= Slider
+        # 3. HIDE "Insufficient Data" players (The Jawhar Jordan Fix) - Optional, but recommended to clean the list
+        
         mask = (df['position'].isin(selected_pos)) & (df['confidence_score'] >= min_conf)
+        
+        # Apply filter
         filtered_df = df[mask].sort_values("projected_score", ascending=False)
         
         if not filtered_df.empty:
@@ -228,7 +256,8 @@ def render_projections_content(week):
                 color_discrete_map={
                     "Safe": "#00A8E8",      # Cyan
                     "Volatile": "#B0B0B0",  # Silver
-                    "Boom/Bust": "#EF553B"  # Red
+                    "Boom/Bust": "#EF553B", # Red
+                    "Insufficient Data": "#444444" # Gray for filtered/bad data
                 },
                 title="Projected Score +/- 1 Std Dev"
             )
@@ -285,6 +314,9 @@ elif mode == "📉 Performance Audit":
     
     if not df.empty:
         df = df[df['position'].isin(selected_audit_pos)]
+        
+        # FILTER: Remove zero-projection players from the audit too
+        df = df[df['projected_score'] > 0]
         
         if not df.empty:
             df['error'] = df['projected_score'] - df['actual_score']
