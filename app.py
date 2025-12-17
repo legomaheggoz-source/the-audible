@@ -82,10 +82,12 @@ st.markdown("""
         border-color: #EF553B !important;
     }
     
-    /* 8. MOBILE UX FIXES */
-    /* Hides the "resize handle" so you can't accidentally drag the sidebar to full screen */
+    /* 8. MOBILE UX LOCK (Strict) */
+    /* This completely hides the drag handle. No resizing, no fullscreen. Toggle only. */
     div[data-testid="stSidebarResizeHandle"] {
-        display: none !important;
+        visibility: hidden !important;
+        pointer-events: none !important;
+        width: 0px !important;
     }
     
     /* Dataframes */
@@ -123,31 +125,26 @@ def load_projections(week):
         for col in cols_to_clip:
             if col in df.columns:
                 df[col] = df[col].clip(lower=0)
+        
+        # 2. REMOVE ZERO/NEGATIVE PROJECTIONS (The "Useful" Filter)
+        # We only keep players projected for at least 0.1 points
+        df = df[df['projected_score'] > 0.0]
 
-        # 2. FILL MISSING RANGES
+        # 3. FILL MISSING RANGES
         if 'std_dev' in df.columns:
-            # If std_dev is missing, assume 0
             df['std_dev'] = df['std_dev'].fillna(0)
-            
-            # Calculate ranges if not present
             if 'range_low' not in df.columns:
                 df['range_low'] = (df['projected_score'] - df['std_dev']).clip(lower=0)
             if 'range_high' not in df.columns:
                 df['range_high'] = df['projected_score'] + df['std_dev']
         
-        # 3. FIX "ONE-HIT WONDERS" (The Jawhar Jordan Rule)
-        # If Floor == Ceiling (std_dev is 0), it implies sample size = 1.
-        # We force their Confidence Score to 0 to prevent them from showing as "Safe".
-        # We also create a flag to potentially hide them.
+        # 4. FIX "ONE-HIT WONDERS"
+        # If range is effectively 0, tank the confidence to 0
+        if 'range_high' in df.columns:
+            zero_variance_mask = (df['range_high'] - df['range_low']) < 0.1
+            df.loc[zero_variance_mask, 'confidence_score'] = 0
+            df.loc[zero_variance_mask, 'risk_tier'] = "Insufficient Data"
         
-        # Identify rows where range is zero (or very close to zero)
-        zero_variance_mask = (df['range_high'] - df['range_low']) < 0.1
-        
-        # Tank their confidence score
-        df.loc[zero_variance_mask, 'confidence_score'] = 0
-        df.loc[zero_variance_mask, 'risk_tier'] = "Insufficient Data"
-        
-        # 4. Generate Confidence Labels based on the NEW scores
         df['confidence_label'] = df['confidence_score'].apply(get_confidence_label)
 
     return df
@@ -181,7 +178,7 @@ def get_season_correlations():
     
     if df.empty: return {}
     
-    # FILTER: Remove any rows where projection is <= 0 (as requested)
+    # FILTER: Remove any rows where projection is <= 0
     df = df[df['projected_score'] > 0]
     
     correlations = {}
@@ -194,6 +191,27 @@ def get_season_correlations():
             correlations[pos] = 0.0
             
     return correlations
+
+# --- DIAGNOSTIC TOOL (For "Missing" Players) ---
+def check_missing_players(week):
+    """Checks for players in the 'players' table who have NO projection for this week"""
+    conn = sqlite3.connect(DB_NAME)
+    
+    # Get all active players from roster (simplified check)
+    query_players = "SELECT player_id, player_name, position, team FROM players WHERE position IN ('QB','RB','WR','TE')"
+    df_players = pd.read_sql(query_players, conn)
+    
+    # Get all players with a projection
+    query_proj = f"SELECT player_id FROM predictions_history WHERE season = {CURRENT_SEASON} AND week = {week}"
+    df_proj = pd.read_sql(query_proj, conn)
+    
+    conn.close()
+    
+    if df_players.empty: return pd.DataFrame()
+
+    # Find players IN players table but NOT IN projections
+    missing = df_players[~df_players['player_id'].isin(df_proj['player_id'])]
+    return missing
 
 # --- SIDEBAR CONTENT ---
 st.sidebar.image("logo.png", use_container_width=True) 
@@ -214,19 +232,13 @@ def render_projections_content(week):
     with col1:
         selected_pos = st.multiselect("Position", ["QB", "RB", "WR", "TE"], default=["QB", "RB", "WR", "TE"], key=f"pos_{week}")
     with col2:
-        min_conf = st.slider("Minimum Confidence Score", 0, 100, 50, key=f"conf_{week}")
+        # CHANGED DEFAULT TO 0 so we don't accidentally hide stars with low confidence
+        min_conf = st.slider("Minimum Confidence Score", 0, 100, 0, key=f"conf_{week}")
     
     df = load_projections(week)
     
     if not df.empty:
-        # Filter Logic:
-        # 1. Position Match
-        # 2. Confidence >= Slider
-        # 3. HIDE "Insufficient Data" players (The Jawhar Jordan Fix) - Optional, but recommended to clean the list
-        
         mask = (df['position'].isin(selected_pos)) & (df['confidence_score'] >= min_conf)
-        
-        # Apply filter
         filtered_df = df[mask].sort_values("projected_score", ascending=False)
         
         if not filtered_df.empty:
@@ -254,10 +266,10 @@ def render_projections_content(week):
                 color="risk_tier",
                 hover_data=['range_low', 'range_high'],
                 color_discrete_map={
-                    "Safe": "#00A8E8",      # Cyan
-                    "Volatile": "#B0B0B0",  # Silver
-                    "Boom/Bust": "#EF553B", # Red
-                    "Insufficient Data": "#444444" # Gray for filtered/bad data
+                    "Safe": "#00A8E8",      
+                    "Volatile": "#B0B0B0",  
+                    "Boom/Bust": "#EF553B", 
+                    "Insufficient Data": "#444444"
                 },
                 title="Projected Score +/- 1 Std Dev"
             )
@@ -273,6 +285,21 @@ def render_projections_content(week):
             st.warning("No players match your filters.")
     else:
         st.warning(f"No projections found for Week {week}.")
+    
+    # --- MISSING PLAYERS DIAGNOSTIC ---
+    if week == CURRENT_WEEK:
+        with st.sidebar.expander("🕵️ Data Inspector (Debug)"):
+            st.caption("Players in DB but missing from Projections:")
+            missing_df = check_missing_players(week)
+            if not missing_df.empty:
+                # Simple search box inside the expander
+                search_player = st.text_input("Search Missing Player")
+                if search_player:
+                    missing_df = missing_df[missing_df['player_name'].str.contains(search_player, case=False)]
+                
+                st.dataframe(missing_df[['player_name', 'position', 'team']].head(20), hide_index=True)
+            else:
+                st.success("All active players accounted for.")
 
 # --- PAGE 1: LIVE PROJECTIONS ---
 if mode == "🔮 Live Projections":
@@ -314,9 +341,8 @@ elif mode == "📉 Performance Audit":
     
     if not df.empty:
         df = df[df['position'].isin(selected_audit_pos)]
-        
-        # FILTER: Remove zero-projection players from the audit too
-        df = df[df['projected_score'] > 0]
+        # FILTER: Remove zero-projection players from audit
+        df = df[df['projected_score'] > 0.0]
         
         if not df.empty:
             df['error'] = df['projected_score'] - df['actual_score']
