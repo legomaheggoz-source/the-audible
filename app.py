@@ -81,13 +81,24 @@ st.markdown("""
         border-color: #EF553B !important;
     }
     
-    /* 8. DELETE BUTTON ALIGNMENT FIX */
-    /* This forces the column containing the button to center vertically */
-    div[data-testid="column"] {
-        align-items: center; 
+    /* 8. NAV BAR FIX (THE NUCLEAR OPTION) */
+    /* This hides the top header bar INSIDE the sidebar. 
+       This removes the Close (X) button and the Maximize (Box) button.
+       Users must click the overlay (main screen) to close the menu on mobile. */
+    section[data-testid="stSidebar"] .st-emotion-cache-10oheav {
+        display: none !important;
+    }
+    /* Backup selector for different Streamlit versions */
+    div[data-testid="stSidebarHeader"] {
+        display: none !important;
+    }
+
+    /* 9. DESKTOP LOCK (Hide Resize Handle) */
+    div[data-testid="stSidebarResizeHandle"] {
+        display: none !important;
     }
     
-    /* 9. ROSTER DELETE BUTTON STYLING */
+    /* 10. ROSTER DELETE BUTTON STYLING */
     button[kind="secondary"] {
         padding: 0px 8px !important;
         border: 1px solid #EF553B !important;
@@ -103,7 +114,16 @@ st.markdown("""
         color: white !important;
     }
     
-    /* 10. MOBILE TWEAKS */
+    /* 11. PLAYER CARD STYLING */
+    .player-card {
+        background-color: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 6px;
+        padding: 10px;
+        margin-bottom: 8px;
+    }
+
+    /* 12. MOBILE TWEAKS */
     @media (max-width: 768px) {
         section[data-testid="stSidebar"] {
             width: 85% !important; 
@@ -300,7 +320,7 @@ elif mode == "⚔️ Matchup Sim":
     
     if not all_projections.empty:
         player_list = sorted(all_projections['player_name'].unique().tolist())
-        col1, col2 = st.columns(2, gap="large") # Added gap for better visual separation
+        col1, col2 = st.columns(2, gap="large") 
         
         # --- PRE-CALCULATE TOTALS ---
         my_proj, my_floor, my_ceil = 0.0, 0.0, 0.0
@@ -319,13 +339,15 @@ elif mode == "⚔️ Matchup Sim":
 
         # --- LEFT COLUMN: YOUR TEAM ---
         with col1:
-            # HTML SCOREBOARD BANNER
+            # UPDATED SCOREBOARD BANNER (Includes Ceiling)
             st.markdown(f"""
             <div style="background-color: rgba(0, 168, 232, 0.15); border-left: 5px solid #00A8E8; border-radius: 4px; padding: 15px; margin-bottom: 20px;">
                 <h4 style="margin:0; color: #00A8E8; font-weight: 600;">YOUR TEAM</h4>
                 <div style="display: flex; align-items: baseline; gap: 10px;">
                     <h1 style="margin:0; font-size: 2.8rem; color: white;">{my_proj:.1f}</h1>
-                    <span style="font-size: 0.9rem; color: #ccc;">(Floor: {my_floor:.1f})</span>
+                </div>
+                <div style="font-size: 0.85rem; color: #ccc; margin-top: 4px;">
+                    Floor: <b>{my_floor:.1f}</b> | Ceiling: <b>{my_ceil:.1f}</b>
                 </div>
             </div>
             """, unsafe_allow_html=True)
@@ -343,31 +365,40 @@ elif mode == "⚔️ Matchup Sim":
                 
                 st.markdown("<br>", unsafe_allow_html=True)
                 for index, row in my_team_df.iterrows():
-                    # COMPACT GRID LAYOUT
-                    c_name, c_stats, c_del = st.columns([0.45, 0.40, 0.15])
-                    with c_name:
-                        st.markdown(f"**{row['player_name']}**")
-                        st.caption(f"{row['position']}")
-                    with c_stats:
-                        st.markdown(f"**{row['projected_score']:.1f}**")
-                        st.caption(f"{row['range_low']:.0f}-{row['range_high']:.0f}")
-                    with c_del:
-                        if st.button("✕", key=f"rem_my_{row['player_name']}"):
-                            st.session_state.my_team_roster.remove(row['player_name'])
-                            st.rerun()
-                    st.divider() 
+                    # CONTAINER FOR CARD LOOK
+                    with st.container():
+                        st.markdown('<div class="player-card">', unsafe_allow_html=True)
+                        c_name, c_stats, c_del = st.columns([0.40, 0.45, 0.15])
+                        
+                        with c_name:
+                            st.markdown(f"**{row['player_name']}**")
+                            st.caption(f"{row['position']}")
+                            
+                        with c_stats:
+                            # Improved Layout with Explicit Labels
+                            st.markdown(f"Proj: <b style='font-size:1.1em;'>{row['projected_score']:.1f}</b>", unsafe_allow_html=True)
+                            # Using HTML for tighter control on sub-text
+                            st.markdown(f"<span style='font-size:0.8em; color:#ccc;'>Flr: <b>{row['range_low']:.0f}</b> | Ceil: <b>{row['range_high']:.0f}</b></span>", unsafe_allow_html=True)
+                            
+                        with c_del:
+                            if st.button("✕", key=f"rem_my_{row['player_name']}"):
+                                st.session_state.my_team_roster.remove(row['player_name'])
+                                st.rerun()
+                        st.markdown('</div>', unsafe_allow_html=True)
             else:
                 st.info("Roster is empty.")
 
         # --- RIGHT COLUMN: OPPONENT ---
         with col2:
-            # HTML SCOREBOARD BANNER (Red Theme)
+            # UPDATED SCOREBOARD BANNER (Red Theme)
             st.markdown(f"""
             <div style="background-color: rgba(239, 85, 59, 0.15); border-left: 5px solid #EF553B; border-radius: 4px; padding: 15px; margin-bottom: 20px;">
                 <h4 style="margin:0; color: #EF553B; font-weight: 600;">OPPONENT</h4>
                 <div style="display: flex; align-items: baseline; gap: 10px;">
                     <h1 style="margin:0; font-size: 2.8rem; color: white;">{opp_proj:.1f}</h1>
-                    <span style="font-size: 0.9rem; color: #ccc;">(Floor: {opp_floor:.1f})</span>
+                </div>
+                <div style="font-size: 0.85rem; color: #ccc; margin-top: 4px;">
+                    Floor: <b>{opp_floor:.1f}</b> | Ceiling: <b>{opp_ceil:.1f}</b>
                 </div>
             </div>
             """, unsafe_allow_html=True)
@@ -385,18 +416,20 @@ elif mode == "⚔️ Matchup Sim":
                 
                 st.markdown("<br>", unsafe_allow_html=True)
                 for index, row in opp_team_df.iterrows():
-                    c_name, c_stats, c_del = st.columns([0.45, 0.40, 0.15])
-                    with c_name:
-                        st.markdown(f"**{row['player_name']}**")
-                        st.caption(f"{row['position']}")
-                    with c_stats:
-                        st.markdown(f"**{row['projected_score']:.1f}**")
-                        st.caption(f"{row['range_low']:.0f}-{row['range_high']:.0f}")
-                    with c_del:
-                        if st.button("✕", key=f"rem_opp_{row['player_name']}"):
-                            st.session_state.opp_team_roster.remove(row['player_name'])
-                            st.rerun()
-                    st.divider()
+                    with st.container():
+                        st.markdown('<div class="player-card">', unsafe_allow_html=True)
+                        c_name, c_stats, c_del = st.columns([0.40, 0.45, 0.15])
+                        with c_name:
+                            st.markdown(f"**{row['player_name']}**")
+                            st.caption(f"{row['position']}")
+                        with c_stats:
+                            st.markdown(f"Proj: <b style='font-size:1.1em;'>{row['projected_score']:.1f}</b>", unsafe_allow_html=True)
+                            st.markdown(f"<span style='font-size:0.8em; color:#ccc;'>Flr: <b>{row['range_low']:.0f}</b> | Ceil: <b>{row['range_high']:.0f}</b></span>", unsafe_allow_html=True)
+                        with c_del:
+                            if st.button("✕", key=f"rem_opp_{row['player_name']}"):
+                                st.session_state.opp_team_roster.remove(row['player_name'])
+                                st.rerun()
+                        st.markdown('</div>', unsafe_allow_html=True)
             else:
                 st.info("Roster is empty.")
         
