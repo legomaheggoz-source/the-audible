@@ -83,7 +83,6 @@ st.markdown("""
     }
     
     /* 8. MOBILE UX LOCK (Strict) */
-    /* This completely hides the drag handle. No resizing, no fullscreen. Toggle only. */
     div[data-testid="stSidebarResizeHandle"] {
         visibility: hidden !important;
         pointer-events: none !important;
@@ -120,14 +119,13 @@ def load_projections(week):
     conn.close()
     
     if not df.empty:
-        # 1. CLEAN NEGATIVES (Floor/Ceiling/Score cannot be < 0)
+        # 1. CLEAN NEGATIVES
         cols_to_clip = ['projected_score', 'range_low', 'range_high']
         for col in cols_to_clip:
             if col in df.columns:
                 df[col] = df[col].clip(lower=0)
         
-        # 2. REMOVE ZERO/NEGATIVE PROJECTIONS (The "Useful" Filter)
-        # We only keep players projected for at least 0.1 points
+        # 2. REMOVE ZERO/NEGATIVE PROJECTIONS
         df = df[df['projected_score'] > 0.0]
 
         # 3. FILL MISSING RANGES
@@ -139,7 +137,6 @@ def load_projections(week):
                 df['range_high'] = df['projected_score'] + df['std_dev']
         
         # 4. FIX "ONE-HIT WONDERS"
-        # If range is effectively 0, tank the confidence to 0
         if 'range_high' in df.columns:
             zero_variance_mask = (df['range_high'] - df['range_low']) < 0.1
             df.loc[zero_variance_mask, 'confidence_score'] = 0
@@ -178,7 +175,6 @@ def get_season_correlations():
     
     if df.empty: return {}
     
-    # FILTER: Remove any rows where projection is <= 0
     df = df[df['projected_score'] > 0]
     
     correlations = {}
@@ -192,12 +188,12 @@ def get_season_correlations():
             
     return correlations
 
-# --- DIAGNOSTIC TOOL (For "Missing" Players) ---
+# --- DIAGNOSTIC TOOL (Updated for Visibility) ---
 def check_missing_players(week):
     """Checks for players in the 'players' table who have NO projection for this week"""
     conn = sqlite3.connect(DB_NAME)
     
-    # Get all active players from roster (simplified check)
+    # Get all active players from roster
     query_players = "SELECT player_id, player_name, position, team FROM players WHERE position IN ('QB','RB','WR','TE')"
     df_players = pd.read_sql(query_players, conn)
     
@@ -232,7 +228,6 @@ def render_projections_content(week):
     with col1:
         selected_pos = st.multiselect("Position", ["QB", "RB", "WR", "TE"], default=["QB", "RB", "WR", "TE"], key=f"pos_{week}")
     with col2:
-        # CHANGED DEFAULT TO 0 so we don't accidentally hide stars with low confidence
         min_conf = st.slider("Minimum Confidence Score", 0, 100, 0, key=f"conf_{week}")
     
     df = load_projections(week)
@@ -286,18 +281,30 @@ def render_projections_content(week):
     else:
         st.warning(f"No projections found for Week {week}.")
     
-    # --- MISSING PLAYERS DIAGNOSTIC ---
+    # --- MISSING PLAYERS DIAGNOSTIC (FIXED) ---
     if week == CURRENT_WEEK:
         with st.sidebar.expander("🕵️ Data Inspector (Debug)"):
-            st.caption("Players in DB but missing from Projections:")
+            st.markdown("### ⚠️ Missing Players")
             missing_df = check_missing_players(week)
+            
             if not missing_df.empty:
-                # Simple search box inside the expander
-                search_player = st.text_input("Search Missing Player")
-                if search_player:
-                    missing_df = missing_df[missing_df['player_name'].str.contains(search_player, case=False)]
+                st.error(f"Found {len(missing_df)} players in DB with NO projection.")
+                st.caption("Common causes: Missing Vegas Odds, Name Mismatch, or Injured.")
                 
-                st.dataframe(missing_df[['player_name', 'position', 'team']].head(20), hide_index=True)
+                # Simple search box
+                search_player = st.text_input("Search Missing Player")
+                
+                # Filter logic
+                if search_player:
+                    view_df = missing_df[missing_df['player_name'].str.contains(search_player, case=False)]
+                else:
+                    view_df = missing_df.head(20) # Show top 20 by default
+                
+                # RENDER AS HTML TABLE (Forces visibility)
+                # We use simple HTML to guarantee it's readable against the white sidebar
+                html = view_df[['player_name', 'position', 'team']].to_html(index=False, border=0)
+                st.markdown(html, unsafe_allow_html=True)
+                
             else:
                 st.success("All active players accounted for.")
 
@@ -341,7 +348,6 @@ elif mode == "📉 Performance Audit":
     
     if not df.empty:
         df = df[df['position'].isin(selected_audit_pos)]
-        # FILTER: Remove zero-projection players from audit
         df = df[df['projected_score'] > 0.0]
         
         if not df.empty:
