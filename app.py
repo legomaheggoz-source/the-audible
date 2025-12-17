@@ -81,27 +81,12 @@ st.markdown("""
         border-color: #EF553B !important;
     }
     
-    /* 8. NUCLEAR MOBILE HEADER FIX */
-    /* This completely hides the header decoration on mobile. */
-    @media (max-width: 768px) {
-        header[data-testid="stHeader"] {
-            display: none !important;
-            visibility: hidden !important;
-            height: 0px !important;
-        }
-        
-        /* Ensure the sidebar covers enough space */
-        section[data-testid="stSidebar"] {
-            width: 85% !important; 
-        }
-    }
-    
-    /* 9. DESKTOP LOCK (Hide Resize Handle) */
+    /* 8. DESKTOP LOCK (Hide Resize Handle) */
     div[data-testid="stSidebarResizeHandle"] {
         display: none !important;
     }
     
-    /* 10. ROSTER DELETE BUTTON STYLING */
+    /* 9. ROSTER DELETE BUTTON STYLING */
     /* Makes the 'X' button small, red, and minimal */
     button[kind="secondary"] {
         padding: 0px 8px !important;
@@ -116,6 +101,14 @@ st.markdown("""
     button[kind="secondary"]:hover {
         background-color: #EF553B !important;
         color: white !important;
+    }
+    
+    /* 10. MOBILE SPECIFIC TWEAKS */
+    @media (max-width: 768px) {
+        /* We removed the aggressive header hider so the menu comes back */
+        section[data-testid="stSidebar"] {
+            width: 85% !important; 
+        }
     }
     
     /* Dataframes */
@@ -325,15 +318,11 @@ elif mode == "⚔️ Matchup Sim":
                 my_team_df = all_projections[all_projections['player_name'].isin(st.session_state.my_team_roster)].copy()
                 my_team_df = sort_roster_df(my_team_df)
                 
-                # Render Clean Rows with Delete Button
                 st.markdown("---")
-                
-                # Header Row (Only show on wide screens if needed, but keeping simple here)
                 for index, row in my_team_df.iterrows():
-                    # Create a container for the row
                     with st.container():
-                        # Create columns for the row layout
-                        c_name, c_stats, c_del = st.columns([3, 4, 1])
+                        # CHANGED RATIO: [3, 2, 1] - Tighter stats column
+                        c_name, c_stats, c_del = st.columns([3, 2, 1])
                         
                         with c_name:
                             st.write(f"**{row['player_name']}**")
@@ -341,14 +330,14 @@ elif mode == "⚔️ Matchup Sim":
                             
                         with c_stats:
                             st.write(f"Proj: **{row['projected_score']:.1f}**")
-                            st.caption(f"L: {row['range_low']:.1f} | H: {row['range_high']:.1f}")
+                            st.caption(f"{row['range_low']:.0f} - {row['range_high']:.0f}")
                             
                         with c_del:
                             if st.button("✕", key=f"rem_my_{row['player_name']}"):
                                 st.session_state.my_team_roster.remove(row['player_name'])
                                 st.rerun()
                         
-                        st.divider() # Thin line between players
+                        st.divider() 
 
                 # TOTALS
                 my_floor = my_team_df['range_low'].sum()
@@ -379,7 +368,7 @@ elif mode == "⚔️ Matchup Sim":
                 st.markdown("---")
                 for index, row in opp_team_df.iterrows():
                     with st.container():
-                        c_name, c_stats, c_del = st.columns([3, 4, 1])
+                        c_name, c_stats, c_del = st.columns([3, 2, 1])
                         
                         with c_name:
                             st.write(f"**{row['player_name']}**")
@@ -387,7 +376,7 @@ elif mode == "⚔️ Matchup Sim":
                             
                         with c_stats:
                             st.write(f"Proj: **{row['projected_score']:.1f}**")
-                            st.caption(f"L: {row['range_low']:.1f} | H: {row['range_high']:.1f}")
+                            st.caption(f"{row['range_low']:.0f} - {row['range_high']:.0f}")
                             
                         with c_del:
                             if st.button("✕", key=f"rem_opp_{row['player_name']}"):
