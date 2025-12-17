@@ -40,7 +40,7 @@ st.markdown("""
         padding-top: 0rem;
     }
     
-    /* 4. SIDEBAR TEXT STYLING (Dark Navy) */
+    /* 4. SIDEBAR TEXT STYLING */
     [data-testid="stSidebar"] * {
         color: #0B1E33 !important;
     }
@@ -51,7 +51,7 @@ st.markdown("""
         opacity: 1 !important;
     }
     
-    /* FORCE ALL WIDGET LABELS TO WHITE (Mobile Fix) */
+    /* FORCE ALL WIDGET LABELS TO WHITE */
     label, .stSelectbox label, .stMultiSelect label, .stSlider label {
         color: #FFFFFF !important;
         opacity: 1 !important;
@@ -97,54 +97,77 @@ st.markdown("""
     /* 8. NAV BAR FIX */
     section[data-testid="stSidebar"] .st-emotion-cache-10oheav { display: none !important; }
     div[data-testid="stSidebarHeader"] { display: none !important; }
-
-    /* 9. DESKTOP LOCK */
     div[data-testid="stSidebarResizeHandle"] { display: none !important; }
     
-    /* 10. ROSTER BUTTONS (Add & Delete) */
-    /* This targets BOTH the 'Add' button and the 'Delete' button to make them consistent */
+    /* 9. PREMIUM BUTTON STYLING (The "Nice" Buttons) */
     div.stButton > button {
-        width: 100% !important; /* Forces button to fill the column width */
-        border: 1px solid #444;
-        background-color: #152a45;
+        width: 100% !important;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        background-color: rgba(255, 255, 255, 0.05);
         color: white;
-        height: 42px !important; /* Consistent height for all buttons */
+        height: 42px !important;
+        border-radius: 8px !important; /* Softer corners */
+        transition: all 0.2s ease;
         margin-top: 0px !important;
-        display: flex;
-        align-items: center;
-        justify-content: center;
     }
     div.stButton > button:hover {
         border-color: #00A8E8;
         color: #00A8E8;
+        background-color: rgba(0, 168, 232, 0.1);
     }
     
-    /* Specific styling for the Delete (Secondary) button to be Red-themed on hover */
+    /* 10. DELETE BUTTON (Circular & Clean) */
     button[kind="secondary"] {
-        border-color: #EF553B !important;
+        border: 1px solid rgba(239, 85, 59, 0.5) !important;
         color: #EF553B !important;
-        background-color: transparent !important;
+        border-radius: 50% !important; /* Circle shape */
+        width: 32px !important;
+        height: 32px !important;
+        padding: 0 !important;
+        font-size: 14px !important;
+        display: flex;
+        align-items: center;
+        justify-content: center;
     }
     button[kind="secondary"]:hover {
         background-color: #EF553B !important;
         color: white !important;
+        border-color: #EF553B !important;
     }
     
-    /* 11. MOBILE TWEAKS */
+    /* 11. PLAYER ROW TEXT VISIBILITY (The "White" Fix) */
+    .player-row-text {
+        font-weight: 600 !important;
+        color: #FFFFFF !important; /* Force Pure White */
+        opacity: 1 !important;
+    }
+    .player-row-subtext {
+        font-size: 11px !important;
+        color: #DDDDDD !important; /* Very Light Grey */
+        opacity: 1 !important;
+    }
+
+    /* 12. MOBILE TWEAKS & NO-STACK FIX */
     @media (max-width: 768px) {
         section[data-testid="stSidebar"] { width: 85% !important; }
+        
+        /* Force Plotly Title Visibility */
         .js-plotly-plot .plotly .g-gtitle {
             font-size: 14px !important;
             fill: #FFFFFF !important;
             opacity: 1 !important;
         }
-        /* Make player text smaller on mobile to prevent wrapping */
-        .player-row-text { font-size: 13px !important; }
-        .player-row-subtext { font-size: 10px !important; }
         
-        h1, h2, h3, h4, h5 {
-            color: #FFFFFF !important;
-            opacity: 1 !important;
+        /* THE MAGIC FIX: Prevent Columns from Stacking on Mobile */
+        /* This targets the horizontal block containing the player row and delete button */
+        [data-testid="column"] {
+            width: auto !important;
+            flex: 1 !important;
+        }
+        /* Ensure the Delete button column doesn't get squished */
+        [data-testid="column"]:nth-of-type(2) {
+            flex: 0 0 40px !important; /* Fixed width for the button column */
+            min-width: 40px !important;
         }
     }
     
@@ -340,7 +363,7 @@ elif mode == "⚔️ Matchup Sim":
     
     if not all_projections.empty:
         player_list = sorted(all_projections['player_name'].unique().tolist())
-        col1, col2 = st.columns(2, gap="large") 
+        col1, col2 = st.columns(2, gap="medium") 
         
         # --- PRE-CALCULATE TOTALS ---
         my_proj, my_floor, my_ceil = 0.0, 0.0, 0.0
@@ -367,14 +390,14 @@ elif mode == "⚔️ Matchup Sim":
                         <h2 style="margin:0; font-size: 1.8rem; color: white;">{my_proj:.1f}</h2>
                     </div>
                     <div style="text-align: right; font-size: 0.8rem; color: #ccc;">
-                        <div>Floor: <b>{my_floor:.1f}</b></div>
+                        <div>Flr: <b>{my_floor:.1f}</b></div>
                         <div>Ceil: <b>{my_ceil:.1f}</b></div>
                     </div>
                 </div>
             </div>
             """, unsafe_allow_html=True)
 
-            c_add, c_btn = st.columns([3, 1], gap="small")
+            c_add, c_btn = st.columns([0.8, 0.2], gap="small")
             with c_add:
                 new_player = st.selectbox("Add Player", options=["Select..."] + player_list, key="my_add", label_visibility="collapsed")
             with c_btn:
@@ -390,17 +413,17 @@ elif mode == "⚔️ Matchup Sim":
                 st.markdown("<br>", unsafe_allow_html=True)
                 for index, row in my_team_df.iterrows():
                     with st.container():
-                        # Using 3:1 ratio to match the Add row perfectly
-                        c_info, c_del = st.columns([3, 1], gap="small")
+                        # MOBILE FIX: Use same ratio [0.8, 0.2] to force side-by-side
+                        c_info, c_del = st.columns([0.8, 0.2], gap="small")
                         
                         with c_info:
                             st.markdown(f"""
                             <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.05); padding: 8px; border-radius: 4px; height: 42px;">
-                                <div style="flex: 1;">
-                                    <div class="player-row-text" style="font-weight: bold; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{row['player_name']}</div>
+                                <div>
+                                    <div class="player-row-text" style="font-weight: bold; font-size: 14px;">{row['player_name']}</div>
                                     <div class="player-row-subtext" style="font-size: 11px; color: #aaa;">{row['position']}</div>
                                 </div>
-                                <div style="text-align: right; margin-left: 5px;">
+                                <div style="text-align: right;">
                                     <div class="player-row-text" style="font-weight: bold; font-size: 16px;">{row['projected_score']:.1f}</div>
                                     <div class="player-row-subtext" style="font-size: 10px; color: #aaa;">Flr: {row['range_low']:.0f} | Ceil: {row['range_high']:.0f}</div>
                                 </div>
@@ -408,7 +431,6 @@ elif mode == "⚔️ Matchup Sim":
                             """, unsafe_allow_html=True)
                             
                         with c_del:
-                            # Vertically Center Button (No extra spacer needed with flex button style)
                             if st.button("✕", key=f"rem_my_{row['player_name']}"):
                                 st.session_state.my_team_roster.remove(row['player_name'])
                                 st.rerun()
@@ -425,14 +447,14 @@ elif mode == "⚔️ Matchup Sim":
                         <h2 style="margin:0; font-size: 1.8rem; color: white;">{opp_proj:.1f}</h2>
                     </div>
                     <div style="text-align: right; font-size: 0.8rem; color: #ccc;">
-                        <div>Floor: <b>{opp_floor:.1f}</b></div>
+                        <div>Flr: <b>{opp_floor:.1f}</b></div>
                         <div>Ceil: <b>{opp_ceil:.1f}</b></div>
                     </div>
                 </div>
             </div>
             """, unsafe_allow_html=True)
 
-            c_add_opp, c_btn_opp = st.columns([3, 1], gap="small")
+            c_add_opp, c_btn_opp = st.columns([0.8, 0.2], gap="small")
             with c_add_opp:
                 new_opp = st.selectbox("Add Player", options=["Select..."] + player_list, key="opp_add", label_visibility="collapsed")
             with c_btn_opp:
@@ -448,15 +470,15 @@ elif mode == "⚔️ Matchup Sim":
                 st.markdown("<br>", unsafe_allow_html=True)
                 for index, row in opp_team_df.iterrows():
                     with st.container():
-                        c_info, c_del = st.columns([3, 1], gap="small")
+                        c_info, c_del = st.columns([0.8, 0.2], gap="small")
                         with c_info:
                             st.markdown(f"""
                             <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.05); padding: 8px; border-radius: 4px; height: 42px;">
-                                <div style="flex: 1;">
-                                    <div class="player-row-text" style="font-weight: bold; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{row['player_name']}</div>
+                                <div>
+                                    <div class="player-row-text" style="font-weight: bold; font-size: 14px;">{row['player_name']}</div>
                                     <div class="player-row-subtext" style="font-size: 11px; color: #aaa;">{row['position']}</div>
                                 </div>
-                                <div style="text-align: right; margin-left: 5px;">
+                                <div style="text-align: right;">
                                     <div class="player-row-text" style="font-weight: bold; font-size: 16px;">{row['projected_score']:.1f}</div>
                                     <div class="player-row-subtext" style="font-size: 10px; color: #aaa;">Flr: {row['range_low']:.0f} | Ceil: {row['range_high']:.0f}</div>
                                 </div>
