@@ -1,0 +1,10 @@
+streamlit
+pandas
+plotly
+sqlite3-0.1.1  # Note: sqlite3 is standard lib, but sometimes needed here just in case, or you can omit it. 
+# actually, sqlite3 is built-in to python. Let's stick to the non-standard ones.
+# Correct list:
+streamlit
+pandas
+plotly
+numpy

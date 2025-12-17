@@ -1,0 +1,6 @@
+[theme]
+primaryColor = "#00A8E8"        # Electric Cyan (Sliders, Progress Bars, Active Widgets)
+backgroundColor = "#0B1E33"     # Midnight Navy (Main Background)
+secondaryBackgroundColor = "#F5F7FA" # Off-White (Sidebar Background)
+textColor = "#F5F7FA"           # Off-White (Global Text - Main Area)
+font = "sans serif"
