@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import sqlite3
 import plotly.express as px
+import plotly.graph_objects as go
 import os
 import datetime
 import pytz
@@ -51,7 +52,7 @@ st.markdown("""
         color: #F5F7FA !important;
     }
 
-    /* 6. DROPDOWN GLOBAL ENFORCER (Mobile & Desktop) */
+    /* 6. DROPDOWN GLOBAL ENFORCER */
     div[data-baseweb="popover"], div[data-baseweb="menu"] {
         background-color: #152a45 !important;
     }
@@ -88,16 +89,10 @@ st.markdown("""
     }
     
     /* 9. MOBILE SPECIFIC FIXES */
-    /* Only applies to screens smaller than 768px (Phones) */
     @media (max-width: 768px) {
-        /* Completely HIDE the collapse/expand button on mobile. 
-           Users will tap the background overlay to close the menu. 
-           This eliminates the confusing "Square/Maximize" icon. */
         button[data-testid="stSidebarCollapseButton"] {
             display: none !important;
         }
-        
-        /* Ensure the sidebar covers enough space to be usable */
         section[data-testid="stSidebar"] {
             width: 80% !important; 
         }
@@ -122,8 +117,6 @@ def get_last_updated():
         return "Unknown"
 
 def get_confidence_label(row):
-    # STUD LOGIC: If projected for 15+ points, never call them "Low Confidence".
-    # Call them "Volatile Star" instead.
     score = row['confidence_score']
     proj = row['projected_score']
     
@@ -164,7 +157,7 @@ def load_projections(week):
             df.loc[zero_variance_mask, 'confidence_score'] = 0
             df.loc[zero_variance_mask, 'risk_tier'] = "Insufficient Data"
         
-        # 5. APPLY NEW LABEL LOGIC (Pass the whole row)
+        # 5. APPLY NEW LABEL LOGIC
         df['confidence_label'] = df.apply(get_confidence_label, axis=1)
 
     return df
@@ -211,38 +204,12 @@ def get_season_correlations():
             
     return correlations
 
-# --- DIAGNOSTIC TOOL ---
-def check_missing_players(week):
-    conn = sqlite3.connect(DB_NAME)
-    try:
-        # Check if players table exists and get data
-        query_players = "SELECT player_id, player_name, position, team FROM players WHERE position IN ('QB','RB','WR','TE')"
-        df_players = pd.read_sql(query_players, conn)
-        
-        # Get projections
-        query_proj = f"SELECT player_id FROM predictions_history WHERE season = {CURRENT_SEASON} AND week = {week}"
-        df_proj = pd.read_sql(query_proj, conn)
-        
-        conn.close()
-        
-        if df_players.empty: 
-            return pd.DataFrame()
-
-        # Find players IN players table but NOT IN projections
-        missing = df_players[~df_players['player_id'].isin(df_proj['player_id'])]
-        return missing
-
-    except Exception:
-        # If table is missing or DB is locked, fail silently so the app doesn't crash
-        conn.close()
-        return pd.DataFrame()
-
 # --- SIDEBAR CONTENT ---
 st.sidebar.image("logo.png", use_container_width=True) 
 
 mode = st.sidebar.radio(
     "Navigation", 
-    ["🔮 Live Projections", "📜 Projection History", "📉 Performance Audit"]
+    ["🔮 Live Projections", "⚔️ H2H Matchup", "📜 Projection History", "📉 Performance Audit"]
 )
 
 # --- REUSABLE PROJECTION CONTENT ---
@@ -256,7 +223,6 @@ def render_projections_content(week):
     with col1:
         selected_pos = st.multiselect("Position", ["QB", "RB", "WR", "TE"], default=["QB", "RB", "WR", "TE"], key=f"pos_{week}")
     with col2:
-        # DEFAULT SLIDER IS 0 (Show everyone by default)
         min_conf = st.slider("Minimum Confidence Score", 0, 100, 0, key=f"conf_{week}")
     
     df = load_projections(week)
@@ -287,12 +253,12 @@ def render_projections_content(week):
             fig = px.scatter(
                 top_20, x="projected_score", y="player_name", 
                 error_x="std_dev", error_x_minus="std_dev",
-                color="confidence_label", # Use the label for color now
+                color="confidence_label", 
                 hover_data=['range_low', 'range_high'],
                 color_discrete_map={
                     "High Confidence": "#00A8E8",      
                     "Medium Confidence": "#B0B0B0",  
-                    "Volatile Star 🌟": "#FFD700", # GOLD for Stars
+                    "Volatile Star 🌟": "#FFD700",
                     "Low Confidence": "#EF553B", 
                     "Insufficient Data": "#444444"
                 },
@@ -307,41 +273,116 @@ def render_projections_content(week):
             )
             st.plotly_chart(fig, use_container_width=True)
             
-            # --- EXPLAINER BLURB (To help user understand Confidence) ---
             st.info("ℹ️ **Note:** 'Confidence' measures **Predictability**, not Talent. A 'Volatile Star' (Low Confidence) is a great player who has had some inconsistent games recently.")
             
         else:
             st.warning("No players match your filters.")
     else:
         st.warning(f"No projections found for Week {week}.")
-    
-    # --- MISSING PLAYERS DIAGNOSTIC ---
-    if week == CURRENT_WEEK:
-        with st.sidebar.expander("🕵️ Data Inspector (Debug)"):
-            st.markdown("### ⚠️ Missing Players")
-            missing_df = check_missing_players(week)
-            
-            if not missing_df.empty:
-                st.error(f"Found {len(missing_df)} players in DB with NO projection.")
-                st.caption("Common causes: Missing Vegas Odds, Name Mismatch, or Injured.")
-                
-                search_player = st.text_input("Search Missing Player")
-                if search_player:
-                    view_df = missing_df[missing_df['player_name'].str.contains(search_player, case=False)]
-                else:
-                    view_df = missing_df.head(20) 
-                
-                html = view_df[['player_name', 'position', 'team']].to_html(index=False, border=0)
-                st.markdown(html, unsafe_allow_html=True)
-            else:
-                st.success("All active players accounted for.")
 
 # --- PAGE 1: LIVE PROJECTIONS ---
 if mode == "🔮 Live Projections":
     st.title(f"Week {CURRENT_WEEK} Projections")
     render_projections_content(CURRENT_WEEK)
 
-# --- PAGE 2: PROJECTION HISTORY ---
+# --- PAGE 2: H2H MATCHUP ---
+elif mode == "⚔️ H2H Matchup":
+    st.title(f"Week {CURRENT_WEEK} H2H Projections")
+    
+    # Load all projections for the search bars
+    all_projections = load_projections(CURRENT_WEEK)
+    
+    if not all_projections.empty:
+        # Create a list of names for the dropdown
+        # Sort alphabetically for easier searching
+        player_list = sorted(all_projections['player_name'].unique().tolist())
+        
+        col1, col2 = st.columns(2)
+        
+        # --- LEFT COLUMN: YOUR TEAM ---
+        with col1:
+            st.subheader("Your Team")
+            # Multiselect acts as the search bar + list builder
+            my_team_names = st.multiselect("Select Your Starters", player_list, key="my_team_search")
+            
+            if my_team_names:
+                # Filter DF for selected players
+                my_team_df = all_projections[all_projections['player_name'].isin(my_team_names)]
+                
+                # Calculate Totals
+                my_proj = my_team_df['projected_score'].sum()
+                my_floor = my_team_df['range_low'].sum()
+                my_ceil = my_team_df['range_high'].sum()
+                
+                # Display Scoreboard
+                st.metric("Total Projection", f"{my_proj:.1f}", delta=None)
+                c_a, c_b = st.columns(2)
+                c_a.metric("Floor", f"{my_floor:.1f}")
+                c_b.metric("Ceiling", f"{my_ceil:.1f}")
+                
+                # Display List
+                st.dataframe(
+                    my_team_df[['player_name', 'position', 'projected_score']],
+                    hide_index=True,
+                    use_container_width=True
+                )
+            else:
+                st.info("Search and add players to build your roster.")
+
+        # --- RIGHT COLUMN: OPPONENT ---
+        with col2:
+            st.subheader("Opponent")
+            opp_team_names = st.multiselect("Select Opponent Starters", player_list, key="opp_team_search")
+            
+            if opp_team_names:
+                opp_team_df = all_projections[all_projections['player_name'].isin(opp_team_names)]
+                
+                opp_proj = opp_team_df['projected_score'].sum()
+                opp_floor = opp_team_df['range_low'].sum()
+                opp_ceil = opp_team_df['range_high'].sum()
+                
+                st.metric("Total Projection", f"{opp_proj:.1f}", delta=None)
+                c_a, c_b = st.columns(2)
+                c_a.metric("Floor", f"{opp_floor:.1f}")
+                c_b.metric("Ceiling", f"{opp_ceil:.1f}")
+                
+                st.dataframe(
+                    opp_team_df[['player_name', 'position', 'projected_score']],
+                    hide_index=True,
+                    use_container_width=True
+                )
+            else:
+                st.info("Search and add players to build opponent roster.")
+        
+        # --- COMPARISON CHART ---
+        if my_team_names and opp_team_names:
+            st.divider()
+            st.subheader("⚔️ The Tale of the Tape")
+            
+            # Simple bar chart comparing totals
+            comp_data = {
+                "Team": ["You", "You", "You", "Opponent", "Opponent", "Opponent"],
+                "Metric": ["Floor", "Projection", "Ceiling", "Floor", "Projection", "Ceiling"],
+                "Score": [my_floor, my_proj, my_ceil, opp_floor, opp_proj, opp_ceil]
+            }
+            comp_df = pd.DataFrame(comp_data)
+            
+            fig = px.bar(
+                comp_df, x="Metric", y="Score", color="Team", barmode="group",
+                color_discrete_map={"You": "#00A8E8", "Opponent": "#EF553B"},
+                text_auto='.1f'
+            )
+            fig.update_layout(
+                plot_bgcolor='rgba(0,0,0,0)', 
+                paper_bgcolor='rgba(0,0,0,0)', 
+                font_color="#F5F7FA"
+            )
+            st.plotly_chart(fig, use_container_width=True)
+
+    else:
+        st.error("No projections available for H2H.")
+
+# --- PAGE 3: PROJECTION HISTORY ---
 elif mode == "📜 Projection History":
     c1, c2 = st.columns([3, 1]) 
     with c1:
@@ -354,7 +395,7 @@ elif mode == "📜 Projection History":
     if selected_hist_week:
         render_projections_content(selected_hist_week)
 
-# --- PAGE 3: PERFORMANCE AUDIT ---
+# --- PAGE 4: PERFORMANCE AUDIT ---
 elif mode == "📉 Performance Audit":
     c1, c2 = st.columns([3, 1]) 
     with c1:
