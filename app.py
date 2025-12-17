@@ -82,11 +82,25 @@ st.markdown("""
         border-color: #EF553B !important;
     }
     
-    /* 8. MOBILE UX LOCK (Strict) */
+    /* 8. DESKTOP LOCK (Hide Resize Handle) */
     div[data-testid="stSidebarResizeHandle"] {
-        visibility: hidden !important;
-        pointer-events: none !important;
-        width: 0px !important;
+        display: none !important;
+    }
+    
+    /* 9. MOBILE SPECIFIC FIXES */
+    /* Only applies to screens smaller than 768px (Phones) */
+    @media (max-width: 768px) {
+        /* Completely HIDE the collapse/expand button on mobile. 
+           Users will tap the background overlay to close the menu. 
+           This eliminates the confusing "Square/Maximize" icon. */
+        button[data-testid="stSidebarCollapseButton"] {
+            display: none !important;
+        }
+        
+        /* Ensure the sidebar covers enough space to be usable */
+        section[data-testid="stSidebar"] {
+            width: 80% !important; 
+        }
     }
     
     /* Dataframes */
@@ -107,7 +121,15 @@ def get_last_updated():
     except:
         return "Unknown"
 
-def get_confidence_label(score):
+def get_confidence_label(row):
+    # STUD LOGIC: If projected for 15+ points, never call them "Low Confidence".
+    # Call them "Volatile Star" instead.
+    score = row['confidence_score']
+    proj = row['projected_score']
+    
+    if proj >= 15.0 and score < 45:
+        return "Volatile Star 🌟"
+    
     if score >= 75: return "High Confidence"
     if score >= 45: return "Medium Confidence"
     return "Low Confidence"
@@ -142,7 +164,8 @@ def load_projections(week):
             df.loc[zero_variance_mask, 'confidence_score'] = 0
             df.loc[zero_variance_mask, 'risk_tier'] = "Insufficient Data"
         
-        df['confidence_label'] = df['confidence_score'].apply(get_confidence_label)
+        # 5. APPLY NEW LABEL LOGIC (Pass the whole row)
+        df['confidence_label'] = df.apply(get_confidence_label, axis=1)
 
     return df
 
@@ -188,24 +211,16 @@ def get_season_correlations():
             
     return correlations
 
-# --- DIAGNOSTIC TOOL (Updated for Visibility) ---
+# --- DIAGNOSTIC TOOL ---
 def check_missing_players(week):
-    """Checks for players in the 'players' table who have NO projection for this week"""
     conn = sqlite3.connect(DB_NAME)
-    
-    # Get all active players from roster
     query_players = "SELECT player_id, player_name, position, team FROM players WHERE position IN ('QB','RB','WR','TE')"
     df_players = pd.read_sql(query_players, conn)
-    
-    # Get all players with a projection
     query_proj = f"SELECT player_id FROM predictions_history WHERE season = {CURRENT_SEASON} AND week = {week}"
     df_proj = pd.read_sql(query_proj, conn)
-    
     conn.close()
     
     if df_players.empty: return pd.DataFrame()
-
-    # Find players IN players table but NOT IN projections
     missing = df_players[~df_players['player_id'].isin(df_proj['player_id'])]
     return missing
 
@@ -228,6 +243,7 @@ def render_projections_content(week):
     with col1:
         selected_pos = st.multiselect("Position", ["QB", "RB", "WR", "TE"], default=["QB", "RB", "WR", "TE"], key=f"pos_{week}")
     with col2:
+        # DEFAULT SLIDER IS 0 (Show everyone by default)
         min_conf = st.slider("Minimum Confidence Score", 0, 100, 0, key=f"conf_{week}")
     
     df = load_projections(week)
@@ -238,13 +254,13 @@ def render_projections_content(week):
         
         if not filtered_df.empty:
             st.dataframe(
-                filtered_df[['player_name', 'position', 'projected_score', 'range_low', 'range_high', 'risk_tier', 'confidence_score']],
+                filtered_df[['player_name', 'position', 'projected_score', 'range_low', 'range_high', 'confidence_label', 'confidence_score']],
                 use_container_width=True,
                 hide_index=True, 
                 column_config={
                     "player_name": "Player",
                     "position": "Pos",
-                    "risk_tier": "Risk Profile",
+                    "confidence_label": "Risk Profile",
                     "projected_score": st.column_config.ProgressColumn("Projection", format="%.1f", min_value=0, max_value=30),
                     "confidence_score": st.column_config.NumberColumn("Conf", format="%.0f %%"),
                     "range_low": st.column_config.NumberColumn("Floor", format="%.1f"),
@@ -258,12 +274,13 @@ def render_projections_content(week):
             fig = px.scatter(
                 top_20, x="projected_score", y="player_name", 
                 error_x="std_dev", error_x_minus="std_dev",
-                color="risk_tier",
+                color="confidence_label", # Use the label for color now
                 hover_data=['range_low', 'range_high'],
                 color_discrete_map={
-                    "Safe": "#00A8E8",      
-                    "Volatile": "#B0B0B0",  
-                    "Boom/Bust": "#EF553B", 
+                    "High Confidence": "#00A8E8",      
+                    "Medium Confidence": "#B0B0B0",  
+                    "Volatile Star 🌟": "#FFD700", # GOLD for Stars
+                    "Low Confidence": "#EF553B", 
                     "Insufficient Data": "#444444"
                 },
                 title="Projected Score +/- 1 Std Dev"
@@ -276,12 +293,16 @@ def render_projections_content(week):
                 font_color="#F5F7FA"
             )
             st.plotly_chart(fig, use_container_width=True)
+            
+            # --- EXPLAINER BLURB (To help user understand Confidence) ---
+            st.info("ℹ️ **Note:** 'Confidence' measures **Predictability**, not Talent. A 'Volatile Star' (Low Confidence) is a great player who has had some inconsistent games recently.")
+            
         else:
             st.warning("No players match your filters.")
     else:
         st.warning(f"No projections found for Week {week}.")
     
-    # --- MISSING PLAYERS DIAGNOSTIC (FIXED) ---
+    # --- MISSING PLAYERS DIAGNOSTIC ---
     if week == CURRENT_WEEK:
         with st.sidebar.expander("🕵️ Data Inspector (Debug)"):
             st.markdown("### ⚠️ Missing Players")
@@ -291,20 +312,14 @@ def render_projections_content(week):
                 st.error(f"Found {len(missing_df)} players in DB with NO projection.")
                 st.caption("Common causes: Missing Vegas Odds, Name Mismatch, or Injured.")
                 
-                # Simple search box
                 search_player = st.text_input("Search Missing Player")
-                
-                # Filter logic
                 if search_player:
                     view_df = missing_df[missing_df['player_name'].str.contains(search_player, case=False)]
                 else:
-                    view_df = missing_df.head(20) # Show top 20 by default
+                    view_df = missing_df.head(20) 
                 
-                # RENDER AS HTML TABLE (Forces visibility)
-                # We use simple HTML to guarantee it's readable against the white sidebar
                 html = view_df[['player_name', 'position', 'team']].to_html(index=False, border=0)
                 st.markdown(html, unsafe_allow_html=True)
-                
             else:
                 st.success("All active players accounted for.")
 
