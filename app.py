@@ -5,6 +5,7 @@ import plotly.express as px
 import os
 import datetime
 from config import CURRENT_WEEK, CURRENT_SEASON, DB_NAME 
+import pytz
 
 # Page Config
 st.set_page_config(
@@ -90,11 +91,18 @@ st.markdown("""
 
 # --- HELPER FUNCTIONS ---
 def get_last_updated():
+    """Gets the last modification time of the database and converts to ET"""
     try:
         timestamp = os.path.getmtime(DB_NAME)
-        dt_object = datetime.datetime.fromtimestamp(timestamp)
-        return dt_object.strftime("%b %d, %I:%M %p") 
-    except:
+        # 1. Get the time in UTC (Universal Time)
+        dt_utc = datetime.datetime.fromtimestamp(timestamp, datetime.timezone.utc)
+        
+        # 2. Convert to US/Eastern Time
+        tz_eastern = pytz.timezone('US/Eastern')
+        dt_eastern = dt_utc.astimezone(tz_eastern)
+        
+        return dt_eastern.strftime("%b %d, %I:%M %p ET") 
+    except Exception as e:
         return "Unknown"
 
 def get_confidence_label(score):
