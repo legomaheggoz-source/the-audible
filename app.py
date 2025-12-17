@@ -46,13 +46,15 @@ st.markdown("""
     }
     
     /* 5. MAIN AREA TEXT STYLING (White) */
-    .main .block-container, .main h1, .main h2, .main h3, .main p, .main span, .main div {
+    .main .block-container, .main h1, .main h2, .main h3, .main h4, .main h5, .main p, .main span, .main div, [data-testid="stMetricLabel"] {
         color: #F5F7FA !important;
+        opacity: 1 !important; /* Force full visibility on mobile */
     }
     
-    /* FORCE WHITE TEXT FOR CAPTIONS GLOBALLY (Fixes Grey Text on Mobile) */
+    /* FORCE WHITE TEXT FOR CAPTIONS GLOBALLY */
     [data-testid="stCaptionContainer"] {
         color: rgba(255, 255, 255, 0.9) !important;
+        opacity: 1 !important;
     }
 
     /* 6. DROPDOWN GLOBAL ENFORCER */
@@ -107,7 +109,7 @@ st.markdown("""
         background-color: transparent !important;
         border-radius: 4px !important;
         font-size: 16px !important;
-        height: 38px !important; /* MATCH DROPDOWN HEIGHT for alignment */
+        height: 38px !important; 
         width: 100% !important;
         line-height: 1 !important;
         display: flex;
@@ -124,18 +126,24 @@ st.markdown("""
         section[data-testid="stSidebar"] {
             width: 85% !important; 
         }
-        /* Fix Chart Text Size on Mobile */
         .js-plotly-plot .plotly .g-gtitle {
             font-size: 14px !important;
+            fill: #FFFFFF !important;
+            opacity: 1 !important;
         }
         /* FORCE HIGH CONTRAST TEXT ON MOBILE */
         .player-row-text {
-            font-weight: 500 !important;
+            font-weight: 600 !important;
             opacity: 1 !important;
             color: white !important;
         }
         .player-row-subtext {
             color: #ddd !important;
+            opacity: 1 !important;
+        }
+        /* Fix header visibility specifically on mobile */
+        h1, h2, h3, h4, h5 {
+            color: #FFFFFF !important;
             opacity: 1 !important;
         }
     }
@@ -356,7 +364,6 @@ elif mode == "⚔️ Matchup Sim":
 
         # --- LEFT COLUMN: YOUR TEAM ---
         with col1:
-            # SCOREBOARD BANNER
             st.markdown(f"""
             <div style="background-color: rgba(0, 168, 232, 0.15); border-left: 4px solid #00A8E8; border-radius: 4px; padding: 10px; margin-bottom: 10px;">
                 <div style="display: flex; justify-content: space-between; align-items: center;">
@@ -365,14 +372,13 @@ elif mode == "⚔️ Matchup Sim":
                         <h2 style="margin:0; font-size: 1.8rem; color: white;">{my_proj:.1f}</h2>
                     </div>
                     <div style="text-align: right; font-size: 0.8rem; color: #ccc;">
-                        <div>Flr: <b>{my_floor:.1f}</b></div>
+                        <div>Floor: <b>{my_floor:.1f}</b></div>
                         <div>Ceil: <b>{my_ceil:.1f}</b></div>
                     </div>
                 </div>
             </div>
             """, unsafe_allow_html=True)
 
-            # ADD PLAYER ROW (Alignment Fix: gap="small")
             c_add, c_btn = st.columns([0.80, 0.20], gap="small")
             with c_add:
                 new_player = st.selectbox("Add Player", options=["Select..."] + player_list, key="my_add", label_visibility="collapsed")
@@ -388,11 +394,12 @@ elif mode == "⚔️ Matchup Sim":
                 
                 st.markdown("<br>", unsafe_allow_html=True)
                 for index, row in my_team_df.iterrows():
-                    # MOBILE ROW FIX: [0.80, 0.20] prevents button wrap
                     with st.container():
+                        # Using gap="small" to force tighter alignment
                         c_info, c_del = st.columns([0.80, 0.20], gap="small")
                         
                         with c_info:
+                            # Added explicit labels 'Floor:' and 'Ceil:'
                             st.markdown(f"""
                             <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.05); padding: 8px; border-radius: 4px; margin-bottom: 4px;">
                                 <div>
@@ -401,13 +408,12 @@ elif mode == "⚔️ Matchup Sim":
                                 </div>
                                 <div style="text-align: right;">
                                     <div class="player-row-text" style="font-weight: bold; font-size: 16px;">{row['projected_score']:.1f}</div>
-                                    <div class="player-row-subtext" style="font-size: 10px; color: #aaa;">{row['range_low']:.0f}-{row['range_high']:.0f}</div>
+                                    <div class="player-row-subtext" style="font-size: 10px; color: #aaa;">Floor: {row['range_low']:.0f} | Ceil: {row['range_high']:.0f}</div>
                                 </div>
                             </div>
                             """, unsafe_allow_html=True)
                             
                         with c_del:
-                            # Vertically Center Button
                             st.write("") 
                             if st.button("✕", key=f"rem_my_{row['player_name']}"):
                                 st.session_state.my_team_roster.remove(row['player_name'])
@@ -425,7 +431,7 @@ elif mode == "⚔️ Matchup Sim":
                         <h2 style="margin:0; font-size: 1.8rem; color: white;">{opp_proj:.1f}</h2>
                     </div>
                     <div style="text-align: right; font-size: 0.8rem; color: #ccc;">
-                        <div>Flr: <b>{opp_floor:.1f}</b></div>
+                        <div>Floor: <b>{opp_floor:.1f}</b></div>
                         <div>Ceil: <b>{opp_ceil:.1f}</b></div>
                     </div>
                 </div>
@@ -458,7 +464,7 @@ elif mode == "⚔️ Matchup Sim":
                                 </div>
                                 <div style="text-align: right;">
                                     <div class="player-row-text" style="font-weight: bold; font-size: 16px;">{row['projected_score']:.1f}</div>
-                                    <div class="player-row-subtext" style="font-size: 10px; color: #aaa;">{row['range_low']:.0f}-{row['range_high']:.0f}</div>
+                                    <div class="player-row-subtext" style="font-size: 10px; color: #aaa;">Floor: {row['range_low']:.0f} | Ceil: {row['range_high']:.0f}</div>
                                 </div>
                             </div>
                             """, unsafe_allow_html=True)
