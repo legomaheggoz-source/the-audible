@@ -81,28 +81,41 @@ st.markdown("""
         border-color: #EF553B !important;
     }
     
-    /* 8. DESKTOP LOCK (Hide Resize Handle) */
+    /* 8. NUCLEAR MOBILE HEADER FIX */
+    /* This completely hides the header decoration on mobile. */
+    @media (max-width: 768px) {
+        header[data-testid="stHeader"] {
+            display: none !important;
+            visibility: hidden !important;
+            height: 0px !important;
+        }
+        
+        /* Ensure the sidebar covers enough space */
+        section[data-testid="stSidebar"] {
+            width: 85% !important; 
+        }
+    }
+    
+    /* 9. DESKTOP LOCK (Hide Resize Handle) */
     div[data-testid="stSidebarResizeHandle"] {
         display: none !important;
     }
     
-    /* 9. MOBILE SPECIFIC FIXES */
-    @media (max-width: 768px) {
-        [data-testid="baseButton-headerNoPadding"] { display: none !important; }
-        button[kind="header"] { display: none !important; }
-        section[data-testid="stSidebar"] { width: 85% !important; }
+    /* 10. ROSTER DELETE BUTTON STYLING */
+    /* Makes the 'X' button small, red, and minimal */
+    button[kind="secondary"] {
+        padding: 0px 8px !important;
+        border: 1px solid #EF553B !important;
+        color: #EF553B !important;
+        background-color: transparent !important;
+        border-radius: 4px !important;
+        font-size: 12px !important;
+        height: 28px !important;
+        line-height: 28px !important;
     }
-    
-    /* 10. ROSTER BUILDER BUTTONS */
-    /* Styling the 'Add' and 'X' buttons to look cleaner */
-    div.stButton > button {
-        background-color: #152a45;
-        color: white;
-        border-color: #444;
-    }
-    div.stButton > button:hover {
-        border-color: #00A8E8;
-        color: #00A8E8;
+    button[kind="secondary"]:hover {
+        background-color: #EF553B !important;
+        color: white !important;
     }
     
     /* Dataframes */
@@ -112,7 +125,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- SESSION STATE INITIALIZATION (For Roster Builder) ---
+# --- SESSION STATE INITIALIZATION ---
 if 'my_team_roster' not in st.session_state:
     st.session_state.my_team_roster = []
 if 'opp_team_roster' not in st.session_state:
@@ -147,7 +160,6 @@ def load_projections(week):
     conn.close()
     
     if not df.empty:
-        # CLEANUP LOGIC
         cols_to_clip = ['projected_score', 'range_low', 'range_high']
         for col in cols_to_clip:
             if col in df.columns:
@@ -213,9 +225,7 @@ def get_season_correlations():
             
     return correlations
 
-# --- ROSTER SORTING HELPER ---
 def sort_roster_df(df):
-    """Sorts dataframe by Position (QB > RB > WR > TE)"""
     pos_order = {'QB': 1, 'RB': 2, 'WR': 3, 'TE': 4}
     df['pos_rank'] = df['position'].map(pos_order).fillna(99)
     return df.sort_values('pos_rank').drop(columns=['pos_rank'])
@@ -228,7 +238,7 @@ mode = st.sidebar.radio(
     ["🔮 Live Projections", "⚔️ Matchup Sim", "📜 Projection History", "📉 Performance Audit"]
 )
 
-# --- PAGE 1: LIVE PROJECTIONS ---
+# --- REUSABLE PROJECTION CONTENT ---
 def render_projections_content(week):
     if week == CURRENT_WEEK:
         last_updated = get_last_updated()
@@ -285,6 +295,7 @@ def render_projections_content(week):
     else:
         st.warning(f"No projections found for Week {week}.")
 
+# --- PAGE 1: LIVE PROJECTIONS ---
 if mode == "🔮 Live Projections":
     st.title(f"Week {CURRENT_WEEK} Projections")
     render_projections_content(CURRENT_WEEK)
@@ -303,7 +314,6 @@ elif mode == "⚔️ Matchup Sim":
         with col1:
             st.subheader("Your Team")
             
-            # ADD PLAYER UI
             c_add, c_btn = st.columns([3, 1])
             new_player = c_add.selectbox("Add Player", options=["Select..."] + player_list, key="my_add", label_visibility="collapsed")
             if c_btn.button("Add", key="btn_add_my"):
@@ -311,41 +321,42 @@ elif mode == "⚔️ Matchup Sim":
                     st.session_state.my_team_roster.append(new_player)
                     st.rerun()
 
-            # ROSTER DISPLAY
             if st.session_state.my_team_roster:
                 my_team_df = all_projections[all_projections['player_name'].isin(st.session_state.my_team_roster)].copy()
-                my_team_df = sort_roster_df(my_team_df) # Apply QB->RB->WR->TE Sort
+                my_team_df = sort_roster_df(my_team_df)
                 
-                # Render List with Remove Buttons
+                # Render Clean Rows with Delete Button
                 st.markdown("---")
-                # Custom Header
-                h1, h2, h3, h4, h5 = st.columns([3, 1, 1, 1, 1])
-                h1.markdown("**Player**")
-                h2.markdown("**Pos**")
-                h3.markdown("**Floor**")
-                h4.markdown("**Proj**")
-                h5.markdown("**Del**")
-
+                
+                # Header Row (Only show on wide screens if needed, but keeping simple here)
                 for index, row in my_team_df.iterrows():
-                    r1, r2, r3, r4, r5 = st.columns([3, 1, 1, 1, 1])
-                    r1.write(f"{row['player_name']}")
-                    r2.write(f"{row['position']}")
-                    r3.write(f"{row['range_low']:.1f}")
-                    r4.write(f"**{row['projected_score']:.1f}**")
-                    if r5.button("❌", key=f"rem_my_{row['player_name']}"):
-                        st.session_state.my_team_roster.remove(row['player_name'])
-                        st.rerun()
-                
-                st.markdown("---")
+                    # Create a container for the row
+                    with st.container():
+                        # Create columns for the row layout
+                        c_name, c_stats, c_del = st.columns([3, 4, 1])
+                        
+                        with c_name:
+                            st.write(f"**{row['player_name']}**")
+                            st.caption(f"{row['position']}")
+                            
+                        with c_stats:
+                            st.write(f"Proj: **{row['projected_score']:.1f}**")
+                            st.caption(f"L: {row['range_low']:.1f} | H: {row['range_high']:.1f}")
+                            
+                        with c_del:
+                            if st.button("✕", key=f"rem_my_{row['player_name']}"):
+                                st.session_state.my_team_roster.remove(row['player_name'])
+                                st.rerun()
+                        
+                        st.divider() # Thin line between players
+
                 # TOTALS
                 my_floor = my_team_df['range_low'].sum()
                 my_proj = my_team_df['projected_score'].sum()
                 my_ceil = my_team_df['range_high'].sum()
                 
-                c_t1, c_t2, c_t3 = st.columns(3)
-                c_t1.metric("Total Floor", f"{my_floor:.1f}")
-                c_t2.metric("Total Proj", f"{my_proj:.1f}")
-                c_t3.metric("Total Ceil", f"{my_ceil:.1f}")
+                st.markdown(f"**Total Projection: {my_proj:.1f}**")
+                st.caption(f"Floor: {my_floor:.1f} | Ceiling: {my_ceil:.1f}")
 
             else:
                 st.info("Roster is empty.")
@@ -354,7 +365,6 @@ elif mode == "⚔️ Matchup Sim":
         with col2:
             st.subheader("Opponent")
             
-            # ADD PLAYER UI
             c_add_opp, c_btn_opp = st.columns([3, 1])
             new_opp = c_add_opp.selectbox("Add Player", options=["Select..."] + player_list, key="opp_add", label_visibility="collapsed")
             if c_btn_opp.button("Add", key="btn_add_opp"):
@@ -362,46 +372,43 @@ elif mode == "⚔️ Matchup Sim":
                     st.session_state.opp_team_roster.append(new_opp)
                     st.rerun()
 
-            # ROSTER DISPLAY
             if st.session_state.opp_team_roster:
                 opp_team_df = all_projections[all_projections['player_name'].isin(st.session_state.opp_team_roster)].copy()
                 opp_team_df = sort_roster_df(opp_team_df)
                 
                 st.markdown("---")
-                h1, h2, h3, h4, h5 = st.columns([3, 1, 1, 1, 1])
-                h1.markdown("**Player**")
-                h2.markdown("**Pos**")
-                h3.markdown("**Floor**")
-                h4.markdown("**Proj**")
-                h5.markdown("**Del**")
-
                 for index, row in opp_team_df.iterrows():
-                    r1, r2, r3, r4, r5 = st.columns([3, 1, 1, 1, 1])
-                    r1.write(f"{row['player_name']}")
-                    r2.write(f"{row['position']}")
-                    r3.write(f"{row['range_low']:.1f}")
-                    r4.write(f"**{row['projected_score']:.1f}**")
-                    if r5.button("❌", key=f"rem_opp_{row['player_name']}"):
-                        st.session_state.opp_team_roster.remove(row['player_name'])
-                        st.rerun()
-                
-                st.markdown("---")
-                # TOTALS
+                    with st.container():
+                        c_name, c_stats, c_del = st.columns([3, 4, 1])
+                        
+                        with c_name:
+                            st.write(f"**{row['player_name']}**")
+                            st.caption(f"{row['position']}")
+                            
+                        with c_stats:
+                            st.write(f"Proj: **{row['projected_score']:.1f}**")
+                            st.caption(f"L: {row['range_low']:.1f} | H: {row['range_high']:.1f}")
+                            
+                        with c_del:
+                            if st.button("✕", key=f"rem_opp_{row['player_name']}"):
+                                st.session_state.opp_team_roster.remove(row['player_name'])
+                                st.rerun()
+                        
+                        st.divider()
+
                 opp_floor = opp_team_df['range_low'].sum()
                 opp_proj = opp_team_df['projected_score'].sum()
                 opp_ceil = opp_team_df['range_high'].sum()
                 
-                c_t1, c_t2, c_t3 = st.columns(3)
-                c_t1.metric("Total Floor", f"{opp_floor:.1f}")
-                c_t2.metric("Total Proj", f"{opp_proj:.1f}")
-                c_t3.metric("Total Ceil", f"{opp_ceil:.1f}")
+                st.markdown(f"**Total Projection: {opp_proj:.1f}**")
+                st.caption(f"Floor: {opp_floor:.1f} | Ceiling: {opp_ceil:.1f}")
 
             else:
                 st.info("Roster is empty.")
         
         # --- COMPARISON CHART ---
         if st.session_state.my_team_roster and st.session_state.opp_team_roster:
-            st.divider()
+            st.markdown("---")
             
             diff = my_proj - opp_proj
             if diff > 0:
