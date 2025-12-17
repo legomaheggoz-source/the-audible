@@ -81,9 +81,10 @@ st.markdown("""
         border-color: #EF553B !important;
     }
     
-    /* 8. DESKTOP LOCK (Hide Resize Handle) */
-    div[data-testid="stSidebarResizeHandle"] {
-        display: none !important;
+    /* 8. DELETE BUTTON ALIGNMENT FIX */
+    /* This forces the column containing the button to center vertically */
+    div[data-testid="column"] {
+        align-items: center; 
     }
     
     /* 9. ROSTER DELETE BUTTON STYLING */
@@ -93,16 +94,16 @@ st.markdown("""
         color: #EF553B !important;
         background-color: transparent !important;
         border-radius: 4px !important;
-        font-size: 12px !important;
-        height: 28px !important;
-        line-height: 28px !important;
+        font-size: 14px !important;
+        height: 32px !important;
+        line-height: 1 !important;
     }
     button[kind="secondary"]:hover {
         background-color: #EF553B !important;
         color: white !important;
     }
     
-    /* 10. MOBILE SPECIFIC TWEAKS */
+    /* 10. MOBILE TWEAKS */
     @media (max-width: 768px) {
         section[data-testid="stSidebar"] {
             width: 85% !important; 
@@ -299,21 +300,17 @@ elif mode == "⚔️ Matchup Sim":
     
     if not all_projections.empty:
         player_list = sorted(all_projections['player_name'].unique().tolist())
-        col1, col2 = st.columns(2)
+        col1, col2 = st.columns(2, gap="large") # Added gap for better visual separation
         
-        # --- PRE-CALCULATE TOTALS FOR HEADERS ---
-        my_proj = 0.0
-        my_floor = 0.0
-        my_ceil = 0.0
+        # --- PRE-CALCULATE TOTALS ---
+        my_proj, my_floor, my_ceil = 0.0, 0.0, 0.0
         if st.session_state.my_team_roster:
             temp_df = all_projections[all_projections['player_name'].isin(st.session_state.my_team_roster)]
             my_proj = temp_df['projected_score'].sum()
             my_floor = temp_df['range_low'].sum()
             my_ceil = temp_df['range_high'].sum()
 
-        opp_proj = 0.0
-        opp_floor = 0.0
-        opp_ceil = 0.0
+        opp_proj, opp_floor, opp_ceil = 0.0, 0.0, 0.0
         if st.session_state.opp_team_roster:
             temp_df_opp = all_projections[all_projections['player_name'].isin(st.session_state.opp_team_roster)]
             opp_proj = temp_df_opp['projected_score'].sum()
@@ -322,15 +319,20 @@ elif mode == "⚔️ Matchup Sim":
 
         # --- LEFT COLUMN: YOUR TEAM ---
         with col1:
-            # HEADER WITH SCORE
-            c_h1, c_h2 = st.columns([2, 1])
-            c_h1.subheader("Your Team")
-            c_h2.metric("Proj", f"{my_proj:.1f}")
+            # HTML SCOREBOARD BANNER
+            st.markdown(f"""
+            <div style="background-color: rgba(0, 168, 232, 0.15); border-left: 5px solid #00A8E8; border-radius: 4px; padding: 15px; margin-bottom: 20px;">
+                <h4 style="margin:0; color: #00A8E8; font-weight: 600;">YOUR TEAM</h4>
+                <div style="display: flex; align-items: baseline; gap: 10px;">
+                    <h1 style="margin:0; font-size: 2.8rem; color: white;">{my_proj:.1f}</h1>
+                    <span style="font-size: 0.9rem; color: #ccc;">(Floor: {my_floor:.1f})</span>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
 
-            # ROSTER UI
             c_add, c_btn = st.columns([3, 1])
             new_player = c_add.selectbox("Add Player", options=["Select..."] + player_list, key="my_add", label_visibility="collapsed")
-            if c_btn.button("Add", key="btn_add_my"):
+            if c_btn.button("Add", key="btn_add_my", use_container_width=True):
                 if new_player != "Select..." and new_player not in st.session_state.my_team_roster:
                     st.session_state.my_team_roster.append(new_player)
                     st.rerun()
@@ -339,40 +341,40 @@ elif mode == "⚔️ Matchup Sim":
                 my_team_df = all_projections[all_projections['player_name'].isin(st.session_state.my_team_roster)].copy()
                 my_team_df = sort_roster_df(my_team_df)
                 
-                st.markdown("---")
+                st.markdown("<br>", unsafe_allow_html=True)
                 for index, row in my_team_df.iterrows():
-                    with st.container():
-                        # ADJUSTED LAYOUT: More space for Name and Stats labels
-                        c_name, c_stats, c_del = st.columns([2.5, 3.5, 0.5])
-                        
-                        with c_name:
-                            st.write(f"**{row['player_name']}**")
-                            st.caption(f"{row['position']}")
-                            
-                        with c_stats:
-                            # Explicit labels on new lines or clearly separated
-                            st.write(f"Proj: **{row['projected_score']:.1f}**")
-                            st.caption(f"Floor: {row['range_low']:.1f} | Ceil: {row['range_high']:.1f}")
-                            
-                        with c_del:
-                            if st.button("✕", key=f"rem_my_{row['player_name']}"):
-                                st.session_state.my_team_roster.remove(row['player_name'])
-                                st.rerun()
-                        st.divider() 
+                    # COMPACT GRID LAYOUT
+                    c_name, c_stats, c_del = st.columns([0.45, 0.40, 0.15])
+                    with c_name:
+                        st.markdown(f"**{row['player_name']}**")
+                        st.caption(f"{row['position']}")
+                    with c_stats:
+                        st.markdown(f"**{row['projected_score']:.1f}**")
+                        st.caption(f"{row['range_low']:.0f}-{row['range_high']:.0f}")
+                    with c_del:
+                        if st.button("✕", key=f"rem_my_{row['player_name']}"):
+                            st.session_state.my_team_roster.remove(row['player_name'])
+                            st.rerun()
+                    st.divider() 
             else:
                 st.info("Roster is empty.")
 
         # --- RIGHT COLUMN: OPPONENT ---
         with col2:
-            # HEADER WITH SCORE
-            c_oh1, c_oh2 = st.columns([2, 1])
-            c_oh1.subheader("Opponent")
-            c_oh2.metric("Proj", f"{opp_proj:.1f}")
+            # HTML SCOREBOARD BANNER (Red Theme)
+            st.markdown(f"""
+            <div style="background-color: rgba(239, 85, 59, 0.15); border-left: 5px solid #EF553B; border-radius: 4px; padding: 15px; margin-bottom: 20px;">
+                <h4 style="margin:0; color: #EF553B; font-weight: 600;">OPPONENT</h4>
+                <div style="display: flex; align-items: baseline; gap: 10px;">
+                    <h1 style="margin:0; font-size: 2.8rem; color: white;">{opp_proj:.1f}</h1>
+                    <span style="font-size: 0.9rem; color: #ccc;">(Floor: {opp_floor:.1f})</span>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
 
-            # ROSTER UI
             c_add_opp, c_btn_opp = st.columns([3, 1])
             new_opp = c_add_opp.selectbox("Add Player", options=["Select..."] + player_list, key="opp_add", label_visibility="collapsed")
-            if c_btn_opp.button("Add", key="btn_add_opp"):
+            if c_btn_opp.button("Add", key="btn_add_opp", use_container_width=True):
                 if new_opp != "Select..." and new_opp not in st.session_state.opp_team_roster:
                     st.session_state.opp_team_roster.append(new_opp)
                     st.rerun()
@@ -381,24 +383,20 @@ elif mode == "⚔️ Matchup Sim":
                 opp_team_df = all_projections[all_projections['player_name'].isin(st.session_state.opp_team_roster)].copy()
                 opp_team_df = sort_roster_df(opp_team_df)
                 
-                st.markdown("---")
+                st.markdown("<br>", unsafe_allow_html=True)
                 for index, row in opp_team_df.iterrows():
-                    with st.container():
-                        c_name, c_stats, c_del = st.columns([2.5, 3.5, 0.5])
-                        
-                        with c_name:
-                            st.write(f"**{row['player_name']}**")
-                            st.caption(f"{row['position']}")
-                            
-                        with c_stats:
-                            st.write(f"Proj: **{row['projected_score']:.1f}**")
-                            st.caption(f"Floor: {row['range_low']:.1f} | Ceil: {row['range_high']:.1f}")
-                            
-                        with c_del:
-                            if st.button("✕", key=f"rem_opp_{row['player_name']}"):
-                                st.session_state.opp_team_roster.remove(row['player_name'])
-                                st.rerun()
-                        st.divider()
+                    c_name, c_stats, c_del = st.columns([0.45, 0.40, 0.15])
+                    with c_name:
+                        st.markdown(f"**{row['player_name']}**")
+                        st.caption(f"{row['position']}")
+                    with c_stats:
+                        st.markdown(f"**{row['projected_score']:.1f}**")
+                        st.caption(f"{row['range_low']:.0f}-{row['range_high']:.0f}")
+                    with c_del:
+                        if st.button("✕", key=f"rem_opp_{row['player_name']}"):
+                            st.session_state.opp_team_roster.remove(row['player_name'])
+                            st.rerun()
+                    st.divider()
             else:
                 st.info("Roster is empty.")
         
