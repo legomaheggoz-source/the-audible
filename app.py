@@ -5,7 +5,6 @@ import plotly.express as px
 import os
 import datetime
 import pytz
-import numpy as np
 from config import CURRENT_WEEK, CURRENT_SEASON, DB_NAME 
 
 # Page Config
@@ -87,20 +86,23 @@ st.markdown("""
         display: none !important;
     }
     
-    /* 9. MOBILE SPECIFIC FIXES (The "Box" Killer) */
+    /* 9. MOBILE SPECIFIC FIXES */
     @media (max-width: 768px) {
-        /* This targets the "Maximize" button specifically */
-        [data-testid="baseButton-headerNoPadding"] {
-            display: none !important;
-        }
-        /* This targets the SVG icon itself just in case */
-        button[kind="header"] {
-            display: none !important;
-        }
-        
-        section[data-testid="stSidebar"] {
-            width: 85% !important; 
-        }
+        [data-testid="baseButton-headerNoPadding"] { display: none !important; }
+        button[kind="header"] { display: none !important; }
+        section[data-testid="stSidebar"] { width: 85% !important; }
+    }
+    
+    /* 10. ROSTER BUILDER BUTTONS */
+    /* Styling the 'Add' and 'X' buttons to look cleaner */
+    div.stButton > button {
+        background-color: #152a45;
+        color: white;
+        border-color: #444;
+    }
+    div.stButton > button:hover {
+        border-color: #00A8E8;
+        color: #00A8E8;
     }
     
     /* Dataframes */
@@ -109,6 +111,12 @@ st.markdown("""
     }
 </style>
 """, unsafe_allow_html=True)
+
+# --- SESSION STATE INITIALIZATION (For Roster Builder) ---
+if 'my_team_roster' not in st.session_state:
+    st.session_state.my_team_roster = []
+if 'opp_team_roster' not in st.session_state:
+    st.session_state.opp_team_roster = []
 
 # --- HELPER FUNCTIONS ---
 def get_last_updated():
@@ -139,16 +147,14 @@ def load_projections(week):
     conn.close()
     
     if not df.empty:
-        # 1. CLEAN NEGATIVES
+        # CLEANUP LOGIC
         cols_to_clip = ['projected_score', 'range_low', 'range_high']
         for col in cols_to_clip:
             if col in df.columns:
                 df[col] = df[col].clip(lower=0)
         
-        # 2. REMOVE ZERO/NEGATIVE PROJECTIONS
         df = df[df['projected_score'] > 0.0]
 
-        # 3. FILL MISSING RANGES
         if 'std_dev' in df.columns:
             df['std_dev'] = df['std_dev'].fillna(0)
             if 'range_low' not in df.columns:
@@ -156,13 +162,11 @@ def load_projections(week):
             if 'range_high' not in df.columns:
                 df['range_high'] = df['projected_score'] + df['std_dev']
         
-        # 4. FIX "ONE-HIT WONDERS"
         if 'range_high' in df.columns:
             zero_variance_mask = (df['range_high'] - df['range_low']) < 0.1
             df.loc[zero_variance_mask, 'confidence_score'] = 0
             df.loc[zero_variance_mask, 'risk_tier'] = "Insufficient Data"
         
-        # 5. APPLY NEW LABEL LOGIC
         df['confidence_label'] = df.apply(get_confidence_label, axis=1)
 
     return df
@@ -209,6 +213,13 @@ def get_season_correlations():
             
     return correlations
 
+# --- ROSTER SORTING HELPER ---
+def sort_roster_df(df):
+    """Sorts dataframe by Position (QB > RB > WR > TE)"""
+    pos_order = {'QB': 1, 'RB': 2, 'WR': 3, 'TE': 4}
+    df['pos_rank'] = df['position'].map(pos_order).fillna(99)
+    return df.sort_values('pos_rank').drop(columns=['pos_rank'])
+
 # --- SIDEBAR CONTENT ---
 st.sidebar.image("logo.png", use_container_width=True) 
 
@@ -217,9 +228,8 @@ mode = st.sidebar.radio(
     ["🔮 Live Projections", "⚔️ Matchup Sim", "📜 Projection History", "📉 Performance Audit"]
 )
 
-# --- REUSABLE PROJECTION CONTENT ---
+# --- PAGE 1: LIVE PROJECTIONS ---
 def render_projections_content(week):
-    
     if week == CURRENT_WEEK:
         last_updated = get_last_updated()
         st.caption(f"🕒 Last Updated: {last_updated}")
@@ -261,31 +271,20 @@ def render_projections_content(week):
                 color="confidence_label", 
                 hover_data=['range_low', 'range_high'],
                 color_discrete_map={
-                    "High Confidence": "#00A8E8",      
-                    "Medium Confidence": "#B0B0B0",  
-                    "Volatile Star 🌟": "#FFD700",
-                    "Low Confidence": "#EF553B", 
+                    "High Confidence": "#00A8E8", "Medium Confidence": "#B0B0B0",  
+                    "Volatile Star 🌟": "#FFD700", "Low Confidence": "#EF553B", 
                     "Insufficient Data": "#444444"
                 },
                 title="Projected Score +/- 1 Std Dev"
             )
-            fig.update_layout(
-                yaxis={'categoryorder':'total ascending'}, 
-                height=600,
-                plot_bgcolor='rgba(0,0,0,0)', 
-                paper_bgcolor='rgba(0,0,0,0)',
-                font_color="#F5F7FA"
-            )
+            fig.update_layout(yaxis={'categoryorder':'total ascending'}, height=600, plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', font_color="#F5F7FA")
             st.plotly_chart(fig, use_container_width=True)
-            
             st.info("ℹ️ **Note:** 'Confidence' measures **Predictability**, not Talent. A 'Volatile Star' (Low Confidence) is a great player who has had some inconsistent games recently.")
-            
         else:
             st.warning("No players match your filters.")
     else:
         st.warning(f"No projections found for Week {week}.")
 
-# --- PAGE 1: LIVE PROJECTIONS ---
 if mode == "🔮 Live Projections":
     st.title(f"Week {CURRENT_WEEK} Projections")
     render_projections_content(CURRENT_WEEK)
@@ -298,86 +297,118 @@ elif mode == "⚔️ Matchup Sim":
     
     if not all_projections.empty:
         player_list = sorted(all_projections['player_name'].unique().tolist())
-        
         col1, col2 = st.columns(2)
         
         # --- LEFT COLUMN: YOUR TEAM ---
         with col1:
             st.subheader("Your Team")
-            my_team_names = st.multiselect("Select Starters", player_list, key="my_team_search")
             
-            if my_team_names:
-                my_team_df = all_projections[all_projections['player_name'].isin(my_team_names)]
+            # ADD PLAYER UI
+            c_add, c_btn = st.columns([3, 1])
+            new_player = c_add.selectbox("Add Player", options=["Select..."] + player_list, key="my_add", label_visibility="collapsed")
+            if c_btn.button("Add", key="btn_add_my"):
+                if new_player != "Select..." and new_player not in st.session_state.my_team_roster:
+                    st.session_state.my_team_roster.append(new_player)
+                    st.rerun()
+
+            # ROSTER DISPLAY
+            if st.session_state.my_team_roster:
+                my_team_df = all_projections[all_projections['player_name'].isin(st.session_state.my_team_roster)].copy()
+                my_team_df = sort_roster_df(my_team_df) # Apply QB->RB->WR->TE Sort
                 
-                # Create Display Table
-                display_df = my_team_df[['player_name', 'range_low', 'projected_score', 'range_high']].copy()
-                
-                st.dataframe(
-                    display_df,
-                    hide_index=True,
-                    use_container_width=True,
-                    column_config={
-                        "player_name": "Player",
-                        "range_low": st.column_config.NumberColumn("Floor", format="%.1f"),
-                        "projected_score": st.column_config.NumberColumn("Proj", format="%.1f"),
-                        "range_high": st.column_config.NumberColumn("Ceil", format="%.1f"),
-                    }
-                )
-                
-                # TOTALS ROW
+                # Render List with Remove Buttons
                 st.markdown("---")
-                c1, c2, c3 = st.columns(3)
-                c1.metric("Total Floor", f"{my_team_df['range_low'].sum():.1f}")
-                c2.metric("Total Proj", f"{my_team_df['projected_score'].sum():.1f}")
-                c3.metric("Total Ceil", f"{my_team_df['range_high'].sum():.1f}")
+                # Custom Header
+                h1, h2, h3, h4, h5 = st.columns([3, 1, 1, 1, 1])
+                h1.markdown("**Player**")
+                h2.markdown("**Pos**")
+                h3.markdown("**Floor**")
+                h4.markdown("**Proj**")
+                h5.markdown("**Del**")
+
+                for index, row in my_team_df.iterrows():
+                    r1, r2, r3, r4, r5 = st.columns([3, 1, 1, 1, 1])
+                    r1.write(f"{row['player_name']}")
+                    r2.write(f"{row['position']}")
+                    r3.write(f"{row['range_low']:.1f}")
+                    r4.write(f"**{row['projected_score']:.1f}**")
+                    if r5.button("❌", key=f"rem_my_{row['player_name']}"):
+                        st.session_state.my_team_roster.remove(row['player_name'])
+                        st.rerun()
+                
+                st.markdown("---")
+                # TOTALS
+                my_floor = my_team_df['range_low'].sum()
+                my_proj = my_team_df['projected_score'].sum()
+                my_ceil = my_team_df['range_high'].sum()
+                
+                c_t1, c_t2, c_t3 = st.columns(3)
+                c_t1.metric("Total Floor", f"{my_floor:.1f}")
+                c_t2.metric("Total Proj", f"{my_proj:.1f}")
+                c_t3.metric("Total Ceil", f"{my_ceil:.1f}")
+
             else:
-                st.info("Build your roster.")
+                st.info("Roster is empty.")
 
         # --- RIGHT COLUMN: OPPONENT ---
         with col2:
             st.subheader("Opponent")
-            opp_team_names = st.multiselect("Select Opponent", player_list, key="opp_team_search")
             
-            if opp_team_names:
-                opp_team_df = all_projections[all_projections['player_name'].isin(opp_team_names)]
+            # ADD PLAYER UI
+            c_add_opp, c_btn_opp = st.columns([3, 1])
+            new_opp = c_add_opp.selectbox("Add Player", options=["Select..."] + player_list, key="opp_add", label_visibility="collapsed")
+            if c_btn_opp.button("Add", key="btn_add_opp"):
+                if new_opp != "Select..." and new_opp not in st.session_state.opp_team_roster:
+                    st.session_state.opp_team_roster.append(new_opp)
+                    st.rerun()
+
+            # ROSTER DISPLAY
+            if st.session_state.opp_team_roster:
+                opp_team_df = all_projections[all_projections['player_name'].isin(st.session_state.opp_team_roster)].copy()
+                opp_team_df = sort_roster_df(opp_team_df)
                 
-                display_df_opp = opp_team_df[['player_name', 'range_low', 'projected_score', 'range_high']].copy()
-                
-                st.dataframe(
-                    display_df_opp,
-                    hide_index=True,
-                    use_container_width=True,
-                    column_config={
-                        "player_name": "Player",
-                        "range_low": st.column_config.NumberColumn("Floor", format="%.1f"),
-                        "projected_score": st.column_config.NumberColumn("Proj", format="%.1f"),
-                        "range_high": st.column_config.NumberColumn("Ceil", format="%.1f"),
-                    }
-                )
-                
-                # TOTALS ROW
                 st.markdown("---")
-                c1, c2, c3 = st.columns(3)
-                c1.metric("Total Floor", f"{opp_team_df['range_low'].sum():.1f}")
-                c2.metric("Total Proj", f"{opp_team_df['projected_score'].sum():.1f}")
-                c3.metric("Total Ceil", f"{opp_team_df['range_high'].sum():.1f}")
+                h1, h2, h3, h4, h5 = st.columns([3, 1, 1, 1, 1])
+                h1.markdown("**Player**")
+                h2.markdown("**Pos**")
+                h3.markdown("**Floor**")
+                h4.markdown("**Proj**")
+                h5.markdown("**Del**")
+
+                for index, row in opp_team_df.iterrows():
+                    r1, r2, r3, r4, r5 = st.columns([3, 1, 1, 1, 1])
+                    r1.write(f"{row['player_name']}")
+                    r2.write(f"{row['position']}")
+                    r3.write(f"{row['range_low']:.1f}")
+                    r4.write(f"**{row['projected_score']:.1f}**")
+                    if r5.button("❌", key=f"rem_opp_{row['player_name']}"):
+                        st.session_state.opp_team_roster.remove(row['player_name'])
+                        st.rerun()
+                
+                st.markdown("---")
+                # TOTALS
+                opp_floor = opp_team_df['range_low'].sum()
+                opp_proj = opp_team_df['projected_score'].sum()
+                opp_ceil = opp_team_df['range_high'].sum()
+                
+                c_t1, c_t2, c_t3 = st.columns(3)
+                c_t1.metric("Total Floor", f"{opp_floor:.1f}")
+                c_t2.metric("Total Proj", f"{opp_proj:.1f}")
+                c_t3.metric("Total Ceil", f"{opp_ceil:.1f}")
+
             else:
-                st.info("Build opponent roster.")
+                st.info("Roster is empty.")
         
         # --- COMPARISON CHART ---
-        if my_team_names and opp_team_names:
+        if st.session_state.my_team_roster and st.session_state.opp_team_roster:
             st.divider()
             
-            my_proj = all_projections[all_projections['player_name'].isin(my_team_names)]['projected_score'].sum()
-            opp_proj = all_projections[all_projections['player_name'].isin(opp_team_names)]['projected_score'].sum()
-            
-            # Simple Win Probability Calculation (Heuristic)
             diff = my_proj - opp_proj
             if diff > 0:
-                color = "green"
+                color = "#4CAF50" # Green
                 msg = f"🏆 You are projected to win by {diff:.1f} points!"
             else:
-                color = "red"
+                color = "#EF553B" # Red
                 msg = f"⚠️ You are projected to lose by {abs(diff):.1f} points."
                 
             st.markdown(f"<h3 style='text-align: center; color: {color};'>{msg}</h3>", unsafe_allow_html=True)
@@ -385,14 +416,7 @@ elif mode == "⚔️ Matchup Sim":
             comp_data = {
                 "Team": ["You", "You", "You", "Opponent", "Opponent", "Opponent"],
                 "Metric": ["Floor", "Projection", "Ceiling", "Floor", "Projection", "Ceiling"],
-                "Score": [
-                    all_projections[all_projections['player_name'].isin(my_team_names)]['range_low'].sum(),
-                    my_proj,
-                    all_projections[all_projections['player_name'].isin(my_team_names)]['range_high'].sum(),
-                    all_projections[all_projections['player_name'].isin(opp_team_names)]['range_low'].sum(),
-                    opp_proj,
-                    all_projections[all_projections['player_name'].isin(opp_team_names)]['range_high'].sum()
-                ]
+                "Score": [my_floor, my_proj, my_ceil, opp_floor, opp_proj, opp_ceil]
             }
             comp_df = pd.DataFrame(comp_data)
             
@@ -401,14 +425,8 @@ elif mode == "⚔️ Matchup Sim":
                 color_discrete_map={"You": "#00A8E8", "Opponent": "#EF553B"},
                 text_auto='.1f'
             )
-            fig.update_layout(
-                plot_bgcolor='rgba(0,0,0,0)', 
-                paper_bgcolor='rgba(0,0,0,0)', 
-                font_color="#F5F7FA",
-                height=400
-            )
+            fig.update_layout(plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', font_color="#F5F7FA", height=400)
             st.plotly_chart(fig, use_container_width=True)
-
     else:
         st.error("No projections available for Matchup Sim.")
 
