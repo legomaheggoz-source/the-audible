@@ -4,15 +4,15 @@ import sqlite3
 import plotly.express as px
 import os
 import datetime
+import pytz  # <--- New library for Timezone
 from config import CURRENT_WEEK, CURRENT_SEASON, DB_NAME 
-import pytz
 
 # Page Config
 st.set_page_config(
     page_title="The Audible", 
     page_icon="🏈", 
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="auto"  # <--- CHANGED: "auto" collapses sidebar on mobile
 )
 
 # --- THEME OVERRIDE (CSS INJECTION) ---
@@ -50,7 +50,19 @@ st.markdown("""
         color: #F5F7FA !important;
     }
 
-    /* 6. DROPDOWN GLOBAL ENFORCER (Applies to Main Area) */
+    /* 6. DROPDOWN GLOBAL ENFORCER (Mobile & Desktop) */
+    /* Forces the popup menu background to Dark Navy */
+    div[data-baseweb="popover"], div[data-baseweb="menu"] {
+        background-color: #152a45 !important;
+    }
+    
+    /* Forces ALL text inside the popup menu to be White */
+    /* This catches list items, "No Results" text, and loading states */
+    div[data-baseweb="menu"] * {
+        color: white !important;
+    }
+    
+    /* The Closed Box container */
     div[data-baseweb="select"] > div {
         background-color: #152a45 !important;
         border-color: #444 !important;
@@ -62,13 +74,8 @@ st.markdown("""
     div[data-baseweb="select"] svg {
         fill: white !important;
     }
-    div[data-baseweb="popover"], div[data-baseweb="menu"] {
-        background-color: #152a45 !important;
-    }
-    ul[data-testid="stSelectboxVirtualDropdown"] li {
-        background-color: #152a45 !important;
-        color: white !important;
-    }
+    
+    /* Hover State for Menu Items */
     ul[data-testid="stSelectboxVirtualDropdown"] li:hover {
         background-color: #26466D !important;
     }
@@ -102,7 +109,7 @@ def get_last_updated():
         dt_eastern = dt_utc.astimezone(tz_eastern)
         
         return dt_eastern.strftime("%b %d, %I:%M %p ET") 
-    except Exception as e:
+    except:
         return "Unknown"
 
 def get_confidence_label(score):
@@ -258,8 +265,6 @@ elif mode == "📜 Projection History":
 
 # --- PAGE 3: PERFORMANCE AUDIT ---
 elif mode == "📉 Performance Audit":
-    # --- UPDATED LAYOUT ---
-    # Moved Dropdown from Sidebar to Main Header (Like Projection History)
     c1, c2 = st.columns([3, 1]) 
     with c1:
         st.title("🎯 Accuracy Report")
@@ -268,14 +273,13 @@ elif mode == "📉 Performance Audit":
         audit_weeks_desc = audit_weeks_list[::-1] 
         audit_week = st.selectbox("Select Week to Audit", audit_weeks_desc, index=0)
 
-    # Position Filter below title
     selected_audit_pos = st.multiselect(
         "Filter by Position", 
         ["QB", "RB", "WR", "TE"], 
         default=["QB", "RB", "WR", "TE"]
     )
     
-    st.divider() # Visual separation
+    st.divider() 
     
     df = load_actuals(audit_week)
     
@@ -312,7 +316,6 @@ elif mode == "📉 Performance Audit":
                 use_container_width=True
             )
             
-            # --- THE PUBLIC PROOF ---
             st.divider()
             st.markdown("### 🏆 The Audible vs. The World (Season Long)")
             
