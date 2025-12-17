@@ -49,6 +49,11 @@ st.markdown("""
     .main .block-container, .main h1, .main h2, .main h3, .main p, .main span, .main div {
         color: #F5F7FA !important;
     }
+    
+    /* FORCE WHITE TEXT FOR CAPTIONS GLOBALLY (Fixes Grey Text on Mobile) */
+    [data-testid="stCaptionContainer"] {
+        color: rgba(255, 255, 255, 0.9) !important;
+    }
 
     /* 6. DROPDOWN GLOBAL ENFORCER */
     div[data-baseweb="popover"], div[data-baseweb="menu"] {
@@ -82,7 +87,6 @@ st.markdown("""
     }
     
     /* 8. NAV BAR FIX (Targeted Strike) */
-    /* Hides ONLY the header bar inside the sidebar (where the close button lives) */
     section[data-testid="stSidebar"] .st-emotion-cache-10oheav {
         display: none !important;
     }
@@ -103,8 +107,8 @@ st.markdown("""
         background-color: transparent !important;
         border-radius: 4px !important;
         font-size: 16px !important;
-        height: 32px !important;
-        width: 32px !important;
+        height: 38px !important; /* MATCH DROPDOWN HEIGHT for alignment */
+        width: 100% !important;
         line-height: 1 !important;
         display: flex;
         align-items: center;
@@ -123,6 +127,16 @@ st.markdown("""
         /* Fix Chart Text Size on Mobile */
         .js-plotly-plot .plotly .g-gtitle {
             font-size: 14px !important;
+        }
+        /* FORCE HIGH CONTRAST TEXT ON MOBILE */
+        .player-row-text {
+            font-weight: 500 !important;
+            opacity: 1 !important;
+            color: white !important;
+        }
+        .player-row-subtext {
+            color: #ddd !important;
+            opacity: 1 !important;
         }
     }
     
@@ -283,8 +297,6 @@ def render_projections_content(week):
             st.subheader(f"📊 Range of Outcomes (Top 20)")
             top_20 = filtered_df.head(20)
             
-            # --- IMPROVED CHART FOR MOBILE ---
-            # Moved legend to top to save vertical space
             fig = px.scatter(
                 top_20, x="projected_score", y="player_name", 
                 error_x="std_dev", error_x_minus="std_dev",
@@ -299,17 +311,11 @@ def render_projections_content(week):
             )
             fig.update_layout(
                 yaxis={'categoryorder':'total ascending'}, 
-                height=650, # Slightly taller for better touch targets
+                height=650,
                 plot_bgcolor='rgba(0,0,0,0)', 
                 paper_bgcolor='rgba(0,0,0,0)',
                 font_color="#F5F7FA",
-                legend=dict(
-                    orientation="h",
-                    yanchor="bottom",
-                    y=1.02,
-                    xanchor="right",
-                    x=1
-                )
+                legend=dict(orientation="h", y=1.02, x=1, xanchor="right")
             )
             st.plotly_chart(fig, use_container_width=True)
             st.info("ℹ️ **Note:** 'Confidence' measures **Predictability**, not Talent. A 'Volatile Star' (Low Confidence) is a great player who has had some inconsistent games recently.")
@@ -350,9 +356,9 @@ elif mode == "⚔️ Matchup Sim":
 
         # --- LEFT COLUMN: YOUR TEAM ---
         with col1:
-            # SLIM BANNER
+            # SCOREBOARD BANNER
             st.markdown(f"""
-            <div style="background-color: rgba(0, 168, 232, 0.15); border-left: 4px solid #00A8E8; border-radius: 4px; padding: 10px; margin-bottom: 15px;">
+            <div style="background-color: rgba(0, 168, 232, 0.15); border-left: 4px solid #00A8E8; border-radius: 4px; padding: 10px; margin-bottom: 10px;">
                 <div style="display: flex; justify-content: space-between; align-items: center;">
                     <div>
                         <h5 style="margin:0; color: #00A8E8; font-size: 0.9rem;">YOUR TEAM</h5>
@@ -366,12 +372,15 @@ elif mode == "⚔️ Matchup Sim":
             </div>
             """, unsafe_allow_html=True)
 
-            c_add, c_btn = st.columns([3, 1])
-            new_player = c_add.selectbox("Add Player", options=["Select..."] + player_list, key="my_add", label_visibility="collapsed")
-            if c_btn.button("Add", key="btn_add_my", use_container_width=True):
-                if new_player != "Select..." and new_player not in st.session_state.my_team_roster:
-                    st.session_state.my_team_roster.append(new_player)
-                    st.rerun()
+            # ADD PLAYER ROW (Alignment Fix: gap="small")
+            c_add, c_btn = st.columns([0.80, 0.20], gap="small")
+            with c_add:
+                new_player = st.selectbox("Add Player", options=["Select..."] + player_list, key="my_add", label_visibility="collapsed")
+            with c_btn:
+                if st.button("Add", key="btn_add_my", use_container_width=True):
+                    if new_player != "Select..." and new_player not in st.session_state.my_team_roster:
+                        st.session_state.my_team_roster.append(new_player)
+                        st.rerun()
 
             if st.session_state.my_team_roster:
                 my_team_df = all_projections[all_projections['player_name'].isin(st.session_state.my_team_roster)].copy()
@@ -379,28 +388,27 @@ elif mode == "⚔️ Matchup Sim":
                 
                 st.markdown("<br>", unsafe_allow_html=True)
                 for index, row in my_team_df.iterrows():
-                    # HYBRID ROW: HTML for Text (Left), Streamlit Column for Button (Right)
-                    # This guarantees the text never stacks awkwardly
+                    # MOBILE ROW FIX: [0.80, 0.20] prevents button wrap
                     with st.container():
-                        c_info, c_del = st.columns([0.85, 0.15])
+                        c_info, c_del = st.columns([0.80, 0.20], gap="small")
                         
                         with c_info:
                             st.markdown(f"""
                             <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.05); padding: 8px; border-radius: 4px; margin-bottom: 4px;">
                                 <div>
-                                    <div style="font-weight: bold; font-size: 14px;">{row['player_name']}</div>
-                                    <div style="font-size: 11px; color: #aaa;">{row['position']}</div>
+                                    <div class="player-row-text" style="font-weight: bold; font-size: 14px;">{row['player_name']}</div>
+                                    <div class="player-row-subtext" style="font-size: 11px; color: #aaa;">{row['position']}</div>
                                 </div>
                                 <div style="text-align: right;">
-                                    <div style="font-weight: bold; font-size: 16px; color: #fff;">{row['projected_score']:.1f}</div>
-                                    <div style="font-size: 10px; color: #aaa;">{row['range_low']:.0f}-{row['range_high']:.0f}</div>
+                                    <div class="player-row-text" style="font-weight: bold; font-size: 16px;">{row['projected_score']:.1f}</div>
+                                    <div class="player-row-subtext" style="font-size: 10px; color: #aaa;">{row['range_low']:.0f}-{row['range_high']:.0f}</div>
                                 </div>
                             </div>
                             """, unsafe_allow_html=True)
                             
                         with c_del:
-                            # Vertically align the button to match the text box height
-                            st.write("") # Spacer
+                            # Vertically Center Button
+                            st.write("") 
                             if st.button("✕", key=f"rem_my_{row['player_name']}"):
                                 st.session_state.my_team_roster.remove(row['player_name'])
                                 st.rerun()
@@ -409,9 +417,8 @@ elif mode == "⚔️ Matchup Sim":
 
         # --- RIGHT COLUMN: OPPONENT ---
         with col2:
-            # SLIM BANNER (Red)
             st.markdown(f"""
-            <div style="background-color: rgba(239, 85, 59, 0.15); border-left: 4px solid #EF553B; border-radius: 4px; padding: 10px; margin-bottom: 15px;">
+            <div style="background-color: rgba(239, 85, 59, 0.15); border-left: 4px solid #EF553B; border-radius: 4px; padding: 10px; margin-bottom: 10px;">
                 <div style="display: flex; justify-content: space-between; align-items: center;">
                     <div>
                         <h5 style="margin:0; color: #EF553B; font-size: 0.9rem;">OPPONENT</h5>
@@ -425,12 +432,14 @@ elif mode == "⚔️ Matchup Sim":
             </div>
             """, unsafe_allow_html=True)
 
-            c_add_opp, c_btn_opp = st.columns([3, 1])
-            new_opp = c_add_opp.selectbox("Add Player", options=["Select..."] + player_list, key="opp_add", label_visibility="collapsed")
-            if c_btn_opp.button("Add", key="btn_add_opp", use_container_width=True):
-                if new_opp != "Select..." and new_opp not in st.session_state.opp_team_roster:
-                    st.session_state.opp_team_roster.append(new_opp)
-                    st.rerun()
+            c_add_opp, c_btn_opp = st.columns([0.80, 0.20], gap="small")
+            with c_add_opp:
+                new_opp = st.selectbox("Add Player", options=["Select..."] + player_list, key="opp_add", label_visibility="collapsed")
+            with c_btn_opp:
+                if st.button("Add", key="btn_add_opp", use_container_width=True):
+                    if new_opp != "Select..." and new_opp not in st.session_state.opp_team_roster:
+                        st.session_state.opp_team_roster.append(new_opp)
+                        st.rerun()
 
             if st.session_state.opp_team_roster:
                 opp_team_df = all_projections[all_projections['player_name'].isin(st.session_state.opp_team_roster)].copy()
@@ -439,17 +448,17 @@ elif mode == "⚔️ Matchup Sim":
                 st.markdown("<br>", unsafe_allow_html=True)
                 for index, row in opp_team_df.iterrows():
                     with st.container():
-                        c_info, c_del = st.columns([0.85, 0.15])
+                        c_info, c_del = st.columns([0.80, 0.20], gap="small")
                         with c_info:
                             st.markdown(f"""
                             <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.05); padding: 8px; border-radius: 4px; margin-bottom: 4px;">
                                 <div>
-                                    <div style="font-weight: bold; font-size: 14px;">{row['player_name']}</div>
-                                    <div style="font-size: 11px; color: #aaa;">{row['position']}</div>
+                                    <div class="player-row-text" style="font-weight: bold; font-size: 14px;">{row['player_name']}</div>
+                                    <div class="player-row-subtext" style="font-size: 11px; color: #aaa;">{row['position']}</div>
                                 </div>
                                 <div style="text-align: right;">
-                                    <div style="font-weight: bold; font-size: 16px; color: #fff;">{row['projected_score']:.1f}</div>
-                                    <div style="font-size: 10px; color: #aaa;">{row['range_low']:.0f}-{row['range_high']:.0f}</div>
+                                    <div class="player-row-text" style="font-weight: bold; font-size: 16px;">{row['projected_score']:.1f}</div>
+                                    <div class="player-row-subtext" style="font-size: 10px; color: #aaa;">{row['range_low']:.0f}-{row['range_high']:.0f}</div>
                                 </div>
                             </div>
                             """, unsafe_allow_html=True)
@@ -539,7 +548,6 @@ elif mode == "📉 Performance Audit":
             c3.metric("Avg Error", f"{df['error'].abs().mean():.1f} pts")
             c4.metric("Bias", f"{df['error'].mean():.1f} pts")
 
-            # Improved Chart for Audit (Legend on top)
             fig = px.scatter(
                 df, x="projected_score", y="actual_score", 
                 color="position", hover_data=['player_name', 'error'],
