@@ -95,33 +95,35 @@ st.markdown("""
     }
     
     /* 8. NAV BAR FIX */
-    section[data-testid="stSidebar"] .st-emotion-cache-10oheav {
-        display: none !important;
-    }
-    div[data-testid="stSidebarHeader"] {
-        display: none !important;
-    }
+    section[data-testid="stSidebar"] .st-emotion-cache-10oheav { display: none !important; }
+    div[data-testid="stSidebarHeader"] { display: none !important; }
 
-    /* 9. DESKTOP LOCK (Hide Resize Handle) */
-    div[data-testid="stSidebarResizeHandle"] {
-        display: none !important;
-    }
+    /* 9. DESKTOP LOCK */
+    div[data-testid="stSidebarResizeHandle"] { display: none !important; }
     
-    /* 10. ROSTER DELETE BUTTON STYLING */
-    button[kind="secondary"] {
-        padding: 0px !important;
-        border: 1px solid #EF553B !important;
-        color: #EF553B !important;
-        background-color: transparent !important;
-        border-radius: 4px !important;
-        font-size: 16px !important;
-        height: 58px !important; /* MATCH THE PLAYER CARD HEIGHT */
-        width: 100% !important;
-        line-height: 1 !important;
+    /* 10. ROSTER BUTTONS (Add & Delete) */
+    /* This targets BOTH the 'Add' button and the 'Delete' button to make them consistent */
+    div.stButton > button {
+        width: 100% !important; /* Forces button to fill the column width */
+        border: 1px solid #444;
+        background-color: #152a45;
+        color: white;
+        height: 42px !important; /* Consistent height for all buttons */
+        margin-top: 0px !important;
         display: flex;
         align-items: center;
         justify-content: center;
-        margin-top: 0px !important;
+    }
+    div.stButton > button:hover {
+        border-color: #00A8E8;
+        color: #00A8E8;
+    }
+    
+    /* Specific styling for the Delete (Secondary) button to be Red-themed on hover */
+    button[kind="secondary"] {
+        border-color: #EF553B !important;
+        color: #EF553B !important;
+        background-color: transparent !important;
     }
     button[kind="secondary"]:hover {
         background-color: #EF553B !important;
@@ -130,24 +132,16 @@ st.markdown("""
     
     /* 11. MOBILE TWEAKS */
     @media (max-width: 768px) {
-        section[data-testid="stSidebar"] {
-            width: 85% !important; 
-        }
+        section[data-testid="stSidebar"] { width: 85% !important; }
         .js-plotly-plot .plotly .g-gtitle {
             font-size: 14px !important;
             fill: #FFFFFF !important;
             opacity: 1 !important;
         }
-        /* FORCE HIGH CONTRAST TEXT ON MOBILE */
-        .player-row-text {
-            font-weight: 600 !important;
-            opacity: 1 !important;
-            color: white !important;
-        }
-        .player-row-subtext {
-            color: #ddd !important;
-            opacity: 1 !important;
-        }
+        /* Make player text smaller on mobile to prevent wrapping */
+        .player-row-text { font-size: 13px !important; }
+        .player-row-subtext { font-size: 10px !important; }
+        
         h1, h2, h3, h4, h5 {
             color: #FFFFFF !important;
             opacity: 1 !important;
@@ -155,9 +149,7 @@ st.markdown("""
     }
     
     /* Dataframes */
-    [data-testid="stDataFrame"] {
-        background-color: #152a45;
-    }
+    [data-testid="stDataFrame"] { background-color: #152a45; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -182,9 +174,7 @@ def get_confidence_label(row):
     score = row['confidence_score']
     proj = row['projected_score']
     
-    if proj >= 15.0 and score < 45:
-        return "Volatile Star 🌟"
-    
+    if proj >= 15.0 and score < 45: return "Volatile Star 🌟"
     if score >= 75: return "High Confidence"
     if score >= 45: return "Medium Confidence"
     return "Low Confidence"
@@ -198,8 +188,7 @@ def load_projections(week):
     if not df.empty:
         cols_to_clip = ['projected_score', 'range_low', 'range_high']
         for col in cols_to_clip:
-            if col in df.columns:
-                df[col] = df[col].clip(lower=0)
+            if col in df.columns: df[col] = df[col].clip(lower=0)
         
         df = df[df['projected_score'] > 0.0]
 
@@ -400,18 +389,18 @@ elif mode == "⚔️ Matchup Sim":
                 
                 st.markdown("<br>", unsafe_allow_html=True)
                 for index, row in my_team_df.iterrows():
-                    # UPDATED RATIO: [3, 1] to match the Add Player button alignment
                     with st.container():
+                        # Using 3:1 ratio to match the Add row perfectly
                         c_info, c_del = st.columns([3, 1], gap="small")
                         
                         with c_info:
                             st.markdown(f"""
                             <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.05); padding: 8px; border-radius: 4px; height: 42px;">
-                                <div>
-                                    <div class="player-row-text" style="font-weight: bold; font-size: 14px;">{row['player_name']}</div>
+                                <div style="flex: 1;">
+                                    <div class="player-row-text" style="font-weight: bold; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{row['player_name']}</div>
                                     <div class="player-row-subtext" style="font-size: 11px; color: #aaa;">{row['position']}</div>
                                 </div>
-                                <div style="text-align: right;">
+                                <div style="text-align: right; margin-left: 5px;">
                                     <div class="player-row-text" style="font-weight: bold; font-size: 16px;">{row['projected_score']:.1f}</div>
                                     <div class="player-row-subtext" style="font-size: 10px; color: #aaa;">Flr: {row['range_low']:.0f} | Ceil: {row['range_high']:.0f}</div>
                                 </div>
@@ -419,6 +408,7 @@ elif mode == "⚔️ Matchup Sim":
                             """, unsafe_allow_html=True)
                             
                         with c_del:
+                            # Vertically Center Button (No extra spacer needed with flex button style)
                             if st.button("✕", key=f"rem_my_{row['player_name']}"):
                                 st.session_state.my_team_roster.remove(row['player_name'])
                                 st.rerun()
@@ -462,11 +452,11 @@ elif mode == "⚔️ Matchup Sim":
                         with c_info:
                             st.markdown(f"""
                             <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.05); padding: 8px; border-radius: 4px; height: 42px;">
-                                <div>
-                                    <div class="player-row-text" style="font-weight: bold; font-size: 14px;">{row['player_name']}</div>
+                                <div style="flex: 1;">
+                                    <div class="player-row-text" style="font-weight: bold; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">{row['player_name']}</div>
                                     <div class="player-row-subtext" style="font-size: 11px; color: #aaa;">{row['position']}</div>
                                 </div>
-                                <div style="text-align: right;">
+                                <div style="text-align: right; margin-left: 5px;">
                                     <div class="player-row-text" style="font-weight: bold; font-size: 16px;">{row['projected_score']:.1f}</div>
                                     <div class="player-row-subtext" style="font-size: 10px; color: #aaa;">Flr: {row['range_low']:.0f} | Ceil: {row['range_high']:.0f}</div>
                                 </div>
@@ -505,7 +495,13 @@ elif mode == "⚔️ Matchup Sim":
                 color_discrete_map={"You": "#00A8E8", "Opponent": "#EF553B"},
                 text_auto='.1f'
             )
-            fig.update_layout(plot_bgcolor='rgba(0,0,0,0)', paper_bgcolor='rgba(0,0,0,0)', font_color="#F5F7FA", height=400)
+            fig.update_layout(
+                plot_bgcolor='rgba(0,0,0,0)', 
+                paper_bgcolor='rgba(0,0,0,0)', 
+                font_color="#F5F7FA", 
+                height=400,
+                legend=dict(orientation="h", y=1.1)
+            )
             st.plotly_chart(fig, use_container_width=True)
     else:
         st.error("No projections available for Matchup Sim.")
