@@ -5,7 +5,7 @@ import plotly.express as px
 import os
 import datetime
 import pytz
-import math  # <--- NEW: For Probability Math
+import math 
 from config import CURRENT_WEEK, CURRENT_SEASON, DB_NAME 
 
 # Page Config
@@ -198,28 +198,27 @@ def get_last_updated():
 def get_confidence_label(row):
     score = row['confidence_score']
     proj = row['projected_score']
+    risk_tier = row.get('risk_tier', 'Unknown')
+    
+    # 1. SPECIAL CASE: Unproven Volatile (N=1)
+    if risk_tier == "Unproven Volatile":
+        return "Unproven Volatile ⚠️"
+        
+    if risk_tier == "Insufficient Data":
+        return "Insufficient Data"
+    
+    # 2. STUD LOGIC (Only for proven players)
     if proj >= 15.0 and score < 45: return "Volatile Star 🌟"
     if score >= 75: return "High Confidence"
     if score >= 45: return "Medium Confidence"
     return "Low Confidence"
 
-# --- NEW: STATISTICAL WIN PROBABILITY ---
 def calculate_win_probability(mean_a, std_a, mean_b, std_b):
-    """Calculates the probability that A > B using combined variance."""
     if std_a == 0 and std_b == 0:
         return 1.0 if mean_a > mean_b else 0.0
-    
-    # Difference of means
     mu_diff = mean_a - mean_b
-    
-    # Combined Standard Deviation (Square root of sum of variances)
-    # Var(A - B) = Var(A) + Var(B) assuming independence
     sigma_diff = math.sqrt(std_a**2 + std_b**2)
-    
-    # Z-score for 0
     z = mu_diff / sigma_diff
-    
-    # Cumulative Distribution Function (CDF) using Error Function
     prob = 0.5 * (1 + math.erf(z / math.sqrt(2)))
     return prob
 
@@ -243,10 +242,28 @@ def load_projections(week):
             if 'range_high' not in df.columns:
                 df['range_high'] = df['projected_score'] + df['std_dev']
         
+        # --- UNPROVEN VOLATILE LOGIC ---
         if 'range_high' in df.columns:
-            zero_variance_mask = (df['range_high'] - df['range_low']) < 0.1
-            df.loc[zero_variance_mask, 'confidence_score'] = 0
-            df.loc[zero_variance_mask, 'risk_tier'] = "Insufficient Data"
+            # 1. Identify 1-game wonders (Variance ~ 0)
+            is_unproven = (df['range_high'] - df['range_low']) < 0.1
+            
+            if is_unproven.any():
+                # 2. Capture Original Score (Which acts as the Ceiling)
+                # We do this BEFORE modifying projected_score
+                original_score = df.loc[is_unproven, 'projected_score']
+                
+                # 3. Apply 60% Penalty to Projection (0.4 multiplier)
+                df.loc[is_unproven, 'projected_score'] = original_score * 0.4
+                
+                # 4. Set Floor to 0
+                df.loc[is_unproven, 'range_low'] = 0.0
+                
+                # 5. Set Ceiling to Original Score
+                df.loc[is_unproven, 'range_high'] = original_score
+                
+                # 6. Set Labels
+                df.loc[is_unproven, 'confidence_score'] = 0
+                df.loc[is_unproven, 'risk_tier'] = "Unproven Volatile"
         
         df['confidence_label'] = df.apply(get_confidence_label, axis=1)
 
@@ -352,6 +369,7 @@ def render_projections_content(week):
                 color_discrete_map={
                     "High Confidence": "#00A8E8", "Medium Confidence": "#B0B0B0",  
                     "Volatile Star 🌟": "#FFD700", "Low Confidence": "#EF553B", 
+                    "Unproven Volatile ⚠️": "#EF553B", # Red Warning
                     "Insufficient Data": "#444444"
                 },
                 title="Projected Score +/- 1 Std Dev"
@@ -386,24 +404,20 @@ elif mode == "⚔️ Matchup Sim":
         player_list = sorted(all_projections['player_name'].unique().tolist())
         col1, col2 = st.columns(2, gap="large") 
         
-        # --- CALCULATE TOTALS & VARIANCES ---
+        # --- PRE-CALCULATE TOTALS ---
         my_proj, my_floor, my_ceil = 0.0, 0.0, 0.0
         my_variance_sum = 0.0
-        
         if st.session_state.my_team_roster:
             temp_df = all_projections[all_projections['player_name'].isin(st.session_state.my_team_roster)]
             my_proj = temp_df['projected_score'].sum()
             my_floor = temp_df['range_low'].sum()
             my_ceil = temp_df['range_high'].sum()
-            # Calculate Variance (std_dev^2) for each player and sum them
-            # std_dev = ceiling - proj
             for _, row in temp_df.iterrows():
                 std = row['range_high'] - row['projected_score']
                 my_variance_sum += std**2
 
         opp_proj, opp_floor, opp_ceil = 0.0, 0.0, 0.0
         opp_variance_sum = 0.0
-        
         if st.session_state.opp_team_roster:
             temp_df_opp = all_projections[all_projections['player_name'].isin(st.session_state.opp_team_roster)]
             opp_proj = temp_df_opp['projected_score'].sum()
@@ -424,7 +438,7 @@ elif mode == "⚔️ Matchup Sim":
                     </div>
                     <div style="text-align: right; font-size: 0.8rem; color: #ccc;">
                         <div>Floor: <b>{my_floor:.1f}</b></div>
-                        <div>Ceiling: <b>{my_ceil:.1f}</b></div>
+                        <div>Ceil: <b>{my_ceil:.1f}</b></div>
                     </div>
                 </div>
             </div>
@@ -447,6 +461,7 @@ elif mode == "⚔️ Matchup Sim":
                 for index, row in my_team_df.iterrows():
                     with st.container():
                         c_info, c_del = st.columns([0.8, 0.2], gap="small")
+                        
                         with c_info:
                             st.markdown(f"""
                             <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.05); padding: 8px; border-radius: 4px; height: 42px;">
@@ -460,6 +475,7 @@ elif mode == "⚔️ Matchup Sim":
                                 </div>
                             </div>
                             """, unsafe_allow_html=True)
+                            
                         with c_del:
                             if st.button("✕", key=f"rem_my_{row['player_name']}"):
                                 st.session_state.my_team_roster.remove(row['player_name'])
@@ -478,7 +494,7 @@ elif mode == "⚔️ Matchup Sim":
                     </div>
                     <div style="text-align: right; font-size: 0.8rem; color: #ccc;">
                         <div>Floor: <b>{opp_floor:.1f}</b></div>
-                        <div>Ceiling: <b>{opp_ceil:.1f}</b></div>
+                        <div>Ceil: <b>{opp_ceil:.1f}</b></div>
                     </div>
                 </div>
             </div>
@@ -521,17 +537,13 @@ elif mode == "⚔️ Matchup Sim":
             else:
                 st.info("Roster is empty.")
         
-        # --- COMPARISON CHART & WIN PROBABILITY ---
+        # --- COMPARISON CHART ---
         if st.session_state.my_team_roster and st.session_state.opp_team_roster:
             st.markdown("---")
             
             diff = my_proj - opp_proj
-            
-            # CALCULATE TEAM STANDARD DEVIATIONS (Sqrt of summed variances)
             my_team_std = math.sqrt(my_variance_sum)
             opp_team_std = math.sqrt(opp_variance_sum)
-            
-            # CALCULATE WIN PROBABILITY
             win_prob = calculate_win_probability(my_proj, my_team_std, opp_proj, opp_team_std)
             win_pct = win_prob * 100
             
