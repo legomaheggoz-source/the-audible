@@ -28,37 +28,35 @@ st.markdown("""
         background-color: #F5F7FA;
     }
     
-    /* 3. ADJUST SIDEBAR CONTENT SPACING (Logo Fix) */
-    /* Pushed down to align with the main header bar break */
+    /* 3. SIDEBAR SPACING */
     section[data-testid="stSidebar"] > div {
-        padding-top: 2rem; 
+        padding-top: 2rem;
     }
     [data-testid="stSidebarUserContent"] {
-        padding-top: 1rem; /* Added padding */
-        margin-top: 0rem;  /* Removed negative margin */
+        padding-top: 1rem;
+        margin-top: 0rem; 
     }
     [data-testid="stSidebarNav"] {
         padding-top: 1rem;
     }
     
-    /* 4. SIDEBAR TEXT STYLING (Dark Navy) */
+    /* 4. SIDEBAR TEXT STYLING */
     [data-testid="stSidebar"] * {
         color: #0B1E33 !important;
     }
     
-    /* 5. MAIN AREA TEXT STYLING (White) */
+    /* 5. MAIN AREA TEXT STYLING */
     .main .block-container, .main h1, .main h2, .main h3, .main h4, .main h5, .main p, .main span, .main div, [data-testid="stMetricLabel"] {
         color: #F5F7FA !important;
         opacity: 1 !important;
     }
     
-    /* FORCE ALL WIDGET LABELS TO WHITE (Mobile Fix) */
+    /* FORCE ALL WIDGET LABELS TO WHITE */
     label, .stSelectbox label, .stMultiSelect label, .stSlider label {
         color: #FFFFFF !important;
         opacity: 1 !important;
     }
     
-    /* FORCE WHITE TEXT FOR CAPTIONS GLOBALLY */
     [data-testid="stCaptionContainer"] {
         color: rgba(255, 255, 255, 0.9) !important;
         opacity: 1 !important;
@@ -106,10 +104,12 @@ st.markdown("""
         border: 1px solid rgba(255, 255, 255, 0.2);
         background-color: rgba(255, 255, 255, 0.05);
         color: white;
-        height: 42px !important;
-        border-radius: 8px !important;
+        height: 38px !important; /* REDUCED HEIGHT */
+        border-radius: 6px !important;
         transition: all 0.2s ease;
         margin-top: 0px !important;
+        font-size: 14px !important; /* Smaller text */
+        padding: 0px 10px !important;
     }
     div.stButton > button:hover {
         border-color: #00A8E8;
@@ -122,10 +122,10 @@ st.markdown("""
         border: 1px solid rgba(239, 85, 59, 0.5) !important;
         color: #EF553B !important;
         border-radius: 50% !important; 
-        width: 32px !important;
-        height: 32px !important;
+        width: 30px !important;
+        height: 30px !important;
         padding: 0 !important;
-        font-size: 14px !important;
+        font-size: 12px !important;
         display: flex;
         align-items: center;
         justify-content: center;
@@ -148,7 +148,7 @@ st.markdown("""
         opacity: 1 !important;
     }
 
-    /* 12. MOBILE TWEAKS & STRICT ROW LAYOUT */
+    /* 12. MOBILE TWEAKS */
     @media (max-width: 768px) {
         section[data-testid="stSidebar"] { width: 85% !important; }
         
@@ -158,21 +158,21 @@ st.markdown("""
             opacity: 1 !important;
         }
         
-        /* THIS PREVENTS THE DELETE BUTTON FROM DROPPING TO THE NEXT LINE */
-        [data-testid="stHorizontalBlock"] {
-            flex-wrap: nowrap !important;
-            align-items: center !important;
-        }
-        
-        /* Ensure columns maintain their ratio */
+        /* Add spacing between the two main columns on mobile */
         [data-testid="column"] {
-            flex-shrink: 0 !important;
+            margin-bottom: 10px !important;
         }
         
         h1, h2, h3, h4, h5 {
             color: #FFFFFF !important;
             opacity: 1 !important;
         }
+    }
+    
+    /* 13. PREVENT OVERLAP ON ADD ROW */
+    /* This ensures the dropdown and button don't smash into each other */
+    [data-testid="stVerticalBlock"] > [data-testid="stHorizontalBlock"] {
+        gap: 0.5rem !important;
     }
     
     /* Dataframes */
@@ -367,7 +367,7 @@ elif mode == "⚔️ Matchup Sim":
     
     if not all_projections.empty:
         player_list = sorted(all_projections['player_name'].unique().tolist())
-        col1, col2 = st.columns(2, gap="large") 
+        col1, col2 = st.columns(2, gap="medium") 
         
         # --- PRE-CALCULATE TOTALS ---
         my_proj, my_floor, my_ceil = 0.0, 0.0, 0.0
@@ -395,13 +395,13 @@ elif mode == "⚔️ Matchup Sim":
                     </div>
                     <div style="text-align: right; font-size: 0.8rem; color: #ccc;">
                         <div>Floor: <b>{my_floor:.1f}</b></div>
-                        <div>Ceiling: <b>{my_ceil:.1f}</b></div>
+                        <div>Ceil: <b>{my_ceil:.1f}</b></div>
                     </div>
                 </div>
             </div>
             """, unsafe_allow_html=True)
 
-            c_add, c_btn = st.columns([3, 1], gap="small")
+            c_add, c_btn = st.columns([0.75, 0.25], gap="small")
             with c_add:
                 new_player = st.selectbox("Add Player", options=["Select..."] + player_list, key="my_add", label_visibility="collapsed")
             with c_btn:
@@ -417,6 +417,7 @@ elif mode == "⚔️ Matchup Sim":
                 st.markdown("<br>", unsafe_allow_html=True)
                 for index, row in my_team_df.iterrows():
                     with st.container():
+                        # MOBILE FIX: Use [0.8, 0.2] for player rows to keep X button side-by-side
                         c_info, c_del = st.columns([0.8, 0.2], gap="small")
                         
                         with c_info:
@@ -428,7 +429,7 @@ elif mode == "⚔️ Matchup Sim":
                                 </div>
                                 <div style="text-align: right;">
                                     <div class="player-row-text" style="font-weight: bold; font-size: 16px;">{row['projected_score']:.1f}</div>
-                                    <div class="player-row-subtext" style="font-size: 10px; color: #aaa;">Floor: {row['range_low']:.0f} | Ceiling: {row['range_high']:.0f}</div>
+                                    <div class="player-row-subtext" style="font-size: 10px; color: #aaa;">Floor: {row['range_low']:.0f} | Ceil: {row['range_high']:.0f}</div>
                                 </div>
                             </div>
                             """, unsafe_allow_html=True)
@@ -451,13 +452,13 @@ elif mode == "⚔️ Matchup Sim":
                     </div>
                     <div style="text-align: right; font-size: 0.8rem; color: #ccc;">
                         <div>Floor: <b>{opp_floor:.1f}</b></div>
-                        <div>Ceiling: <b>{opp_ceil:.1f}</b></div>
+                        <div>Ceil: <b>{opp_ceil:.1f}</b></div>
                     </div>
                 </div>
             </div>
             """, unsafe_allow_html=True)
 
-            c_add_opp, c_btn_opp = st.columns([3, 1], gap="small")
+            c_add_opp, c_btn_opp = st.columns([0.75, 0.25], gap="small")
             with c_add_opp:
                 new_opp = st.selectbox("Add Player", options=["Select..."] + player_list, key="opp_add", label_visibility="collapsed")
             with c_btn_opp:
@@ -483,7 +484,7 @@ elif mode == "⚔️ Matchup Sim":
                                 </div>
                                 <div style="text-align: right;">
                                     <div class="player-row-text" style="font-weight: bold; font-size: 16px;">{row['projected_score']:.1f}</div>
-                                    <div class="player-row-subtext" style="font-size: 10px; color: #aaa;">Floor: {row['range_low']:.0f} | Ceiling: {row['range_high']:.0f}</div>
+                                    <div class="player-row-subtext" style="font-size: 10px; color: #aaa;">Floor: {row['range_low']:.0f} | Ceil: {row['range_high']:.0f}</div>
                                 </div>
                             </div>
                             """, unsafe_allow_html=True)
