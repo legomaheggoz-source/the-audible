@@ -195,21 +195,6 @@ def get_last_updated():
     except:
         return "Unknown"
 
-# --- DB HELPER FOR HISTORY ---
-def get_latest_db_week():
-    """Finds the max week that actually exists in the database."""
-    try:
-        conn = sqlite3.connect(DB_NAME)
-        query = f"SELECT MAX(week) FROM predictions_history WHERE season = {CURRENT_SEASON}"
-        df = pd.read_sql(query, conn)
-        conn.close()
-        latest_week = df.iloc[0, 0]
-        if latest_week is None:
-            return 1 # Fallback
-        return int(latest_week)
-    except:
-        return 1
-
 def get_confidence_label(row):
     score = row['confidence_score']
     proj = row['projected_score']
@@ -313,11 +298,12 @@ def sort_roster_df(df):
     return df.sort_values('pos_rank').drop(columns=['pos_rank'])
 
 # --- APP STARTUP & SIDEBAR ---
-# TARGET_WEEK: For Live Projections (From Config)
+# TARGET_WEEK: ALWAYS use the user's manual setting for Live Views
 TARGET_WEEK = CURRENT_WEEK
 
-# HISTORY_WEEK_MAX: For Dropdowns (From Database actuals)
-HISTORY_WEEK_MAX = get_latest_db_week()
+# HISTORY_WEEK_MAX: Use the previous week for Audit/History defaults
+HISTORY_WEEK_MAX = CURRENT_WEEK - 1 
+if HISTORY_WEEK_MAX < 1: HISTORY_WEEK_MAX = 1
 
 st.sidebar.image("logo.png", use_container_width=True) 
 
@@ -461,6 +447,7 @@ elif mode == "⚔️ Matchup Sim":
                 for index, row in my_team_df.iterrows():
                     with st.container():
                         c_info, c_del = st.columns([0.8, 0.2], gap="small")
+                        
                         with c_info:
                             st.markdown(f"""
                             <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.05); padding: 8px; border-radius: 4px; height: 42px;">
@@ -474,6 +461,7 @@ elif mode == "⚔️ Matchup Sim":
                                 </div>
                             </div>
                             """, unsafe_allow_html=True)
+                            
                         with c_del:
                             if st.button("✕", key=f"rem_my_{row['player_name']}"):
                                 st.session_state.my_team_roster.remove(row['player_name'])
@@ -583,9 +571,14 @@ elif mode == "📜 Projection History":
     with c1:
         st.title("Historical Projections")
     with c2:
-        # LOGIC FIX: range(2, 17) includes week 16. Perfect for history.
-        history_weeks = list(range(2, HISTORY_WEEK_MAX + 1))
-        selected_hist_week = st.selectbox("Select Week", history_weeks[::-1])
+        # LOGIC FIX: History includes CURRENT_WEEK, but defaults to previous
+        history_weeks = list(range(2, TARGET_WEEK + 1))
+        # Default index=1 matches the second-to-last item (which is usually Current-1)
+        # If user is in week 2, history_weeks=[2]. index=0 is the only option.
+        def_index = 0
+        if len(history_weeks) > 1: def_index = 1
+        
+        selected_hist_week = st.selectbox("Select Week", history_weeks[::-1], index=def_index)
     
     st.divider() 
     if selected_hist_week:
@@ -597,6 +590,7 @@ elif mode == "📉 Performance Audit":
     with c1:
         st.title("🎯 Accuracy Report")
     with c2:
+        # LOGIC FIX: Audit STRICTLY limits to completed weeks (HISTORY_WEEK_MAX)
         audit_weeks_list = list(range(2, HISTORY_WEEK_MAX + 1))
         audit_weeks_desc = audit_weeks_list[::-1] 
         audit_week = st.selectbox("Select Week to Audit", audit_weeks_desc, index=0)
