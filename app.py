@@ -195,19 +195,28 @@ def get_last_updated():
     except:
         return "Unknown"
 
+# --- NEW: DYNAMIC WEEK DETECTION ---
+def get_latest_data_week():
+    """Finds the max week in the predictions table to set the app state automatically."""
+    try:
+        conn = sqlite3.connect(DB_NAME)
+        query = f"SELECT MAX(week) FROM predictions_history WHERE season = {CURRENT_SEASON}"
+        df = pd.read_sql(query, conn)
+        conn.close()
+        latest_week = df.iloc[0, 0]
+        if latest_week is None:
+            return CURRENT_WEEK # Fallback to config if DB is empty
+        return int(latest_week)
+    except:
+        return CURRENT_WEEK
+
 def get_confidence_label(row):
     score = row['confidence_score']
     proj = row['projected_score']
     risk_tier = row.get('risk_tier', 'Unknown')
     
-    # 1. SPECIAL CASE: Unproven Volatile (N=1)
-    if risk_tier == "Unproven Volatile":
-        return "Unproven Volatile ⚠️"
-        
-    if risk_tier == "Insufficient Data":
-        return "Insufficient Data"
-    
-    # 2. STUD LOGIC (Only for proven players)
+    if risk_tier == "Unproven Volatile": return "Unproven Volatile ⚠️"
+    if risk_tier == "Insufficient Data": return "Insufficient Data"
     if proj >= 15.0 and score < 45: return "Volatile Star 🌟"
     if score >= 75: return "High Confidence"
     if score >= 45: return "Medium Confidence"
@@ -244,24 +253,12 @@ def load_projections(week):
         
         # --- UNPROVEN VOLATILE LOGIC ---
         if 'range_high' in df.columns:
-            # 1. Identify 1-game wonders (Variance ~ 0)
             is_unproven = (df['range_high'] - df['range_low']) < 0.1
-            
             if is_unproven.any():
-                # 2. Capture Original Score (Which acts as the Ceiling)
-                # We do this BEFORE modifying projected_score
                 original_score = df.loc[is_unproven, 'projected_score']
-                
-                # 3. Apply 60% Penalty to Projection (0.4 multiplier)
                 df.loc[is_unproven, 'projected_score'] = original_score * 0.4
-                
-                # 4. Set Floor to 0
                 df.loc[is_unproven, 'range_low'] = 0.0
-                
-                # 5. Set Ceiling to Original Score
                 df.loc[is_unproven, 'range_high'] = original_score
-                
-                # 6. Set Labels
                 df.loc[is_unproven, 'confidence_score'] = 0
                 df.loc[is_unproven, 'risk_tier'] = "Unproven Volatile"
         
@@ -316,7 +313,10 @@ def sort_roster_df(df):
     df['pos_rank'] = df['position'].map(pos_order).fillna(99)
     return df.sort_values('pos_rank').drop(columns=['pos_rank'])
 
-# --- SIDEBAR CONTENT ---
+# --- APP STARTUP & SIDEBAR ---
+# 1. Determine the "Active" Week dynamically from the database
+ACTIVE_WEEK = get_latest_data_week()
+
 st.sidebar.image("logo.png", use_container_width=True) 
 
 mode = st.sidebar.radio(
@@ -326,7 +326,7 @@ mode = st.sidebar.radio(
 
 # --- REUSABLE PROJECTION CONTENT ---
 def render_projections_content(week):
-    if week == CURRENT_WEEK:
+    if week == ACTIVE_WEEK:
         last_updated = get_last_updated()
         st.caption(f"🕒 Last Updated: {last_updated}")
         
@@ -369,7 +369,7 @@ def render_projections_content(week):
                 color_discrete_map={
                     "High Confidence": "#00A8E8", "Medium Confidence": "#B0B0B0",  
                     "Volatile Star 🌟": "#FFD700", "Low Confidence": "#EF553B", 
-                    "Unproven Volatile ⚠️": "#EF553B", # Red Warning
+                    "Unproven Volatile ⚠️": "#EF553B",
                     "Insufficient Data": "#444444"
                 },
                 title="Projected Score +/- 1 Std Dev"
@@ -391,22 +391,21 @@ def render_projections_content(week):
 
 # --- PAGE 1: LIVE PROJECTIONS ---
 if mode == "🔮 Live Projections":
-    st.title(f"Week {CURRENT_WEEK} Projections")
-    render_projections_content(CURRENT_WEEK)
+    st.title(f"Weekly Projections (Week {ACTIVE_WEEK})")
+    render_projections_content(ACTIVE_WEEK)
 
 # --- PAGE 2: MATCHUP SIM ---
 elif mode == "⚔️ Matchup Sim":
-    st.title(f"Week {CURRENT_WEEK} Matchup Sim")
+    st.title(f"Matchup Sim (Week {ACTIVE_WEEK})")
     
-    all_projections = load_projections(CURRENT_WEEK)
+    all_projections = load_projections(ACTIVE_WEEK)
     
     if not all_projections.empty:
         player_list = sorted(all_projections['player_name'].unique().tolist())
         col1, col2 = st.columns(2, gap="large") 
         
-        # --- PRE-CALCULATE TOTALS ---
-        my_proj, my_floor, my_ceil = 0.0, 0.0, 0.0
-        my_variance_sum = 0.0
+        # --- CALCULATE TOTALS ---
+        my_proj, my_floor, my_ceil, my_variance_sum = 0.0, 0.0, 0.0, 0.0
         if st.session_state.my_team_roster:
             temp_df = all_projections[all_projections['player_name'].isin(st.session_state.my_team_roster)]
             my_proj = temp_df['projected_score'].sum()
@@ -416,8 +415,7 @@ elif mode == "⚔️ Matchup Sim":
                 std = row['range_high'] - row['projected_score']
                 my_variance_sum += std**2
 
-        opp_proj, opp_floor, opp_ceil = 0.0, 0.0, 0.0
-        opp_variance_sum = 0.0
+        opp_proj, opp_floor, opp_ceil, opp_variance_sum = 0.0, 0.0, 0.0, 0.0
         if st.session_state.opp_team_roster:
             temp_df_opp = all_projections[all_projections['player_name'].isin(st.session_state.opp_team_roster)]
             opp_proj = temp_df_opp['projected_score'].sum()
@@ -461,7 +459,6 @@ elif mode == "⚔️ Matchup Sim":
                 for index, row in my_team_df.iterrows():
                     with st.container():
                         c_info, c_del = st.columns([0.8, 0.2], gap="small")
-                        
                         with c_info:
                             st.markdown(f"""
                             <div style="display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.05); padding: 8px; border-radius: 4px; height: 42px;">
@@ -475,7 +472,6 @@ elif mode == "⚔️ Matchup Sim":
                                 </div>
                             </div>
                             """, unsafe_allow_html=True)
-                            
                         with c_del:
                             if st.button("✕", key=f"rem_my_{row['player_name']}"):
                                 st.session_state.my_team_roster.remove(row['player_name'])
@@ -585,7 +581,8 @@ elif mode == "📜 Projection History":
     with c1:
         st.title("Historical Projections")
     with c2:
-        history_weeks = list(range(2, CURRENT_WEEK))
+        # DYNAMIC HISTORY RANGE: Up to the latest week available
+        history_weeks = list(range(2, ACTIVE_WEEK))
         selected_hist_week = st.selectbox("Select Week", history_weeks[::-1])
     
     st.divider() 
@@ -598,7 +595,7 @@ elif mode == "📉 Performance Audit":
     with c1:
         st.title("🎯 Accuracy Report")
     with c2:
-        audit_weeks_list = list(range(2, CURRENT_WEEK))
+        audit_weeks_list = list(range(2, ACTIVE_WEEK))
         audit_weeks_desc = audit_weeks_list[::-1] 
         audit_week = st.selectbox("Select Week to Audit", audit_weeks_desc, index=0)
 
@@ -636,7 +633,7 @@ elif mode == "📉 Performance Audit":
             fig.update_layout(
                 plot_bgcolor='rgba(0,0,0,0)', 
                 paper_bgcolor='rgba(0,0,0,0)', 
-                font_color="#F5F7FA",
+                font_color="#F5F7FA", 
                 height=500,
                 legend=dict(orientation="h", y=1.1)
             )
