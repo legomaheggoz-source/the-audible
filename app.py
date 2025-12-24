@@ -195,6 +195,21 @@ def get_last_updated():
     except:
         return "Unknown"
 
+# --- DB HELPER FOR HISTORY ---
+def get_latest_db_week():
+    """Finds the max week that actually exists in the database."""
+    try:
+        conn = sqlite3.connect(DB_NAME)
+        query = f"SELECT MAX(week) FROM predictions_history WHERE season = {CURRENT_SEASON}"
+        df = pd.read_sql(query, conn)
+        conn.close()
+        latest_week = df.iloc[0, 0]
+        if latest_week is None:
+            return 1 # Fallback
+        return int(latest_week)
+    except:
+        return 1
+
 def get_confidence_label(row):
     score = row['confidence_score']
     proj = row['projected_score']
@@ -571,14 +586,10 @@ elif mode == "📜 Projection History":
     with c1:
         st.title("Historical Projections")
     with c2:
-        # LOGIC FIX: History includes CURRENT_WEEK, but defaults to previous
+        # LOGIC FIX: range(2, 18) if target is 17.
         history_weeks = list(range(2, TARGET_WEEK + 1))
-        # Default index=1 matches the second-to-last item (which is usually Current-1)
-        # If user is in week 2, history_weeks=[2]. index=0 is the only option.
-        def_index = 0
-        if len(history_weeks) > 1: def_index = 1
-        
-        selected_hist_week = st.selectbox("Select Week", history_weeks[::-1], index=def_index)
+        # Default to index=0 (The top item, which is week 16)
+        selected_hist_week = st.selectbox("Select Week", history_weeks[::-1], index=0)
     
     st.divider() 
     if selected_hist_week:
@@ -590,7 +601,7 @@ elif mode == "📉 Performance Audit":
     with c1:
         st.title("🎯 Accuracy Report")
     with c2:
-        # LOGIC FIX: Audit STRICTLY limits to completed weeks (HISTORY_WEEK_MAX)
+        # LOGIC FIX: range(2, 17) if max is 16.
         audit_weeks_list = list(range(2, HISTORY_WEEK_MAX + 1))
         audit_weeks_desc = audit_weeks_list[::-1] 
         audit_week = st.selectbox("Select Week to Audit", audit_weeks_desc, index=0)
