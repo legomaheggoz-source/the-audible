@@ -195,9 +195,9 @@ def get_last_updated():
     except:
         return "Unknown"
 
-# --- NEW: DYNAMIC WEEK DETECTION ---
-def get_latest_data_week():
-    """Finds the max week in the predictions table to set the app state automatically."""
+# --- DB HELPER FOR HISTORY ---
+def get_latest_db_week():
+    """Finds the max week that actually exists in the database."""
     try:
         conn = sqlite3.connect(DB_NAME)
         query = f"SELECT MAX(week) FROM predictions_history WHERE season = {CURRENT_SEASON}"
@@ -205,10 +205,10 @@ def get_latest_data_week():
         conn.close()
         latest_week = df.iloc[0, 0]
         if latest_week is None:
-            return CURRENT_WEEK # Fallback to config if DB is empty
+            return 1 # Fallback
         return int(latest_week)
     except:
-        return CURRENT_WEEK
+        return 1
 
 def get_confidence_label(row):
     score = row['confidence_score']
@@ -251,7 +251,6 @@ def load_projections(week):
             if 'range_high' not in df.columns:
                 df['range_high'] = df['projected_score'] + df['std_dev']
         
-        # --- UNPROVEN VOLATILE LOGIC ---
         if 'range_high' in df.columns:
             is_unproven = (df['range_high'] - df['range_low']) < 0.1
             if is_unproven.any():
@@ -314,8 +313,11 @@ def sort_roster_df(df):
     return df.sort_values('pos_rank').drop(columns=['pos_rank'])
 
 # --- APP STARTUP & SIDEBAR ---
-# 1. Determine the "Active" Week dynamically from the database
-ACTIVE_WEEK = get_latest_data_week()
+# TARGET_WEEK: For Live Projections (From Config)
+TARGET_WEEK = CURRENT_WEEK
+
+# HISTORY_WEEK_MAX: For Dropdowns (From Database actuals)
+HISTORY_WEEK_MAX = get_latest_db_week()
 
 st.sidebar.image("logo.png", use_container_width=True) 
 
@@ -326,7 +328,7 @@ mode = st.sidebar.radio(
 
 # --- REUSABLE PROJECTION CONTENT ---
 def render_projections_content(week):
-    if week == ACTIVE_WEEK:
+    if week == TARGET_WEEK:
         last_updated = get_last_updated()
         st.caption(f"🕒 Last Updated: {last_updated}")
         
@@ -387,18 +389,18 @@ def render_projections_content(week):
         else:
             st.warning("No players match your filters.")
     else:
-        st.warning(f"No projections found for Week {week}.")
+        st.warning(f"No projections found for Week {week}. Run daily update script.")
 
 # --- PAGE 1: LIVE PROJECTIONS ---
 if mode == "🔮 Live Projections":
-    st.title(f"Weekly Projections (Week {ACTIVE_WEEK})")
-    render_projections_content(ACTIVE_WEEK)
+    st.title(f"Weekly Projections (Week {TARGET_WEEK})")
+    render_projections_content(TARGET_WEEK)
 
 # --- PAGE 2: MATCHUP SIM ---
 elif mode == "⚔️ Matchup Sim":
-    st.title(f"Matchup Sim (Week {ACTIVE_WEEK})")
+    st.title(f"Matchup Sim (Week {TARGET_WEEK})")
     
-    all_projections = load_projections(ACTIVE_WEEK)
+    all_projections = load_projections(TARGET_WEEK)
     
     if not all_projections.empty:
         player_list = sorted(all_projections['player_name'].unique().tolist())
@@ -581,8 +583,8 @@ elif mode == "📜 Projection History":
     with c1:
         st.title("Historical Projections")
     with c2:
-        # DYNAMIC HISTORY RANGE: Up to the latest week available
-        history_weeks = list(range(2, ACTIVE_WEEK))
+        # LOGIC FIX: range(2, 17) includes week 16. Perfect for history.
+        history_weeks = list(range(2, HISTORY_WEEK_MAX + 1))
         selected_hist_week = st.selectbox("Select Week", history_weeks[::-1])
     
     st.divider() 
@@ -595,7 +597,7 @@ elif mode == "📉 Performance Audit":
     with c1:
         st.title("🎯 Accuracy Report")
     with c2:
-        audit_weeks_list = list(range(2, ACTIVE_WEEK))
+        audit_weeks_list = list(range(2, HISTORY_WEEK_MAX + 1))
         audit_weeks_desc = audit_weeks_list[::-1] 
         audit_week = st.selectbox("Select Week to Audit", audit_weeks_desc, index=0)
 
