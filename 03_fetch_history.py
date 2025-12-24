@@ -42,6 +42,7 @@ def fetch_weekly_stats(season, week):
 def update_history():
     print(f"--- STARTING HISTORY ETL (FIXED MAPPING) ---")
     conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor() 
     
     for season in TARGET_SEASONS:
         print(f"\n📅 PROCESSING SEASON {season}...")
@@ -56,44 +57,51 @@ def update_history():
                 final_df['season'] = df_week['season']
                 final_df['week'] = df_week['week']
                 
-                # 2. TEAM (The Fix for the Missing Vegas Data)
+                # 2. TEAM
                 if 'team' in df_week.columns:
                     final_df['team'] = df_week['team']
                 else:
-                    final_df['team'] = None # Free agents/Inactive players
+                    final_df['team'] = None 
                 
-                # 3. STATS MAPPING (The Fix for the Error)
-                # Left Side = Database Column Name (Must match 01_setup_db.py)
-                # Right Side = Sleeper API Key (What comes from the JSON)
+                # 3. STATS MAPPING
                 cols_map = {
-                    'pass_yd': 'pass_yd',
-                    'pass_td': 'pass_td',
-                    'rush_yd': 'rush_yd',
-                    'rush_td': 'rush_td',
-                    'rec': 'rec',
-                    'rec_yd': 'rec_yd',
-                    'rec_td': 'rec_td',
+                    'pass_yd': 'pass_yd', 'pass_td': 'pass_td',
+                    'rush_yd': 'rush_yd', 'rush_td': 'rush_td',
+                    'rec': 'rec', 'rec_yd': 'rec_yd', 'rec_td': 'rec_td',
                     'pts_ppr': 'pts_ppr'
                 }
                 
-                # Initialize columns with 0.0 first
+                # Initialize columns with 0.0
                 for sql_col in cols_map.keys():
                     final_df[sql_col] = 0.0
 
-                # Fill with data where it exists
+                # Fill with data
                 for sql_col, sleeper_key in cols_map.items():
                     if sleeper_key in df_week.columns:
                         final_df[sql_col] = df_week[sleeper_key]
                 
-                # 4. OPPONENT (Placeholder - Filled in Step 4)
+                # 4. OPPONENT
                 final_df['opponent'] = None
                 
-                # 5. SAVE
+                # --- 5. SAVE (THE FIX: INSERT OR REPLACE) ---
+                columns_to_save = ['player_id', 'season', 'week', 'team', 'pass_yd', 'pass_td', 'rush_yd', 'rush_td', 'rec', 'rec_yd', 'rec_td', 'pts_ppr', 'opponent']
+                
+                # Create the data list
+                data_rows = final_df[columns_to_save].values.tolist()
+                
                 try:
-                    final_df.to_sql('weekly_stats', conn, if_exists='append', index=False)
+                    # explicit SQL query to handle duplicates
+                    cursor.executemany(f"""
+                        INSERT OR REPLACE INTO weekly_stats 
+                        ({', '.join(columns_to_save)})
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """, data_rows)
+                    
+                    conn.commit()
+                    print(f"   ✅ Saved/Updated {len(final_df)} rows.")
+                    
                 except Exception as e:
                     print(f"\n❌ CRITICAL ERROR on {season} Week {week}: {e}")
-                    print(f"   Columns attempting to save: {list(final_df.columns)}")
                     conn.close()
                     return 
 

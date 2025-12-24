@@ -1,74 +1,84 @@
 @echo off
-TITLE The Audible - Weekly Deployment Protocol
-COLOR 0A
+cd /d "C:\Users\Dell\Desktop\Gridiron_Project"
 
-ECHO ---------------------------------------------------
-ECHO    🏈 THE AUDIBLE: WEEKLY UPDATE SEQUENCE 🏈
-ECHO ---------------------------------------------------
-ECHO.
-ECHO  PRE-FLIGHT CHECK:
-ECHO  1. Have you updated 'config.py' to the new week?
-ECHO  2. Is your internet connection active?
-PAUSE
-ECHO.
+echo ========================================================
+echo      🏈 THE AUDIBLE - WEEKLY STATS RECAP (TUESDAY) 🏈
+echo ========================================================
+echo.
 
-:: ACTIVATE VIRTUAL ENV
-call venv\Scripts\activate
+:: --- STEP 0: ACTIVATE ENVIRONMENT ---
+echo [0/5] 🔌 Activating Virtual Environment...
+call .venv\Scripts\activate.bat
+if %errorlevel% neq 0 (
+    echo ❌ ERROR: Could not activate .venv.
+    pause
+    exit /b 1
+)
 
-:: STEP 1: FETCH DATA
-ECHO  [1/4] 📡 Fetching Latest Data (03_fetch_history.py)...
+:: 1. UPDATE ROSTERS
+echo.
+echo [1/5] 📋 Updating Active Player Roster (02_fetch_players.py)...
+python 02_fetch_players.py
+if %errorlevel% neq 0 goto error
+
+:: 2. DOWNLOAD GAME RESULTS
+echo.
+echo [2/5] 📚 Downloading Latest Game Results (03_fetch_history.py)...
 python 03_fetch_history.py
-IF %ERRORLEVEL% NEQ 0 (
-    COLOR 0C
-    ECHO.
-    ECHO  ❌ CRITICAL ERROR: Data Fetch Failed. 
-    ECHO  The process has been stopped. Fix the error above and try again.
-    PAUSE
-    EXIT /B
-)
-ECHO  ✅ Data Fetch Complete.
-ECHO.
+if %errorlevel% neq 0 goto error
 
-:: STEP 2: RUN PROJECTIONS
-ECHO  [2/4] 🧠 Running Alpha Logic Projections...
-python 05_make_projections.py
-IF %ERRORLEVEL% NEQ 0 (
-    COLOR 0C
-    ECHO.
-    ECHO  ❌ CRITICAL ERROR: Projections Failed.
-    ECHO  The process has been stopped.
-    PAUSE
-    EXIT /B
-)
-ECHO  ✅ Projections Updated in Database.
-ECHO.
-
-:: STEP 3: RUN AUDIT
-ECHO  [3/4] 📊 Verifying Database Integrity...
+:: 3. BACKFILL & AUDIT (New Steps)
+echo.
+echo [3/5] 💾 Archiving History & Grading Accuracy (06 & 90)...
+python 06_backfill_history.py
 python 90_measure_accuracy.py
-ECHO  ✅ Database Check Complete.
-ECHO.
+if %errorlevel% neq 0 goto error
 
-:: STEP 4: PUSH TO GITHUB (legomaheggoz-source/the-audible)
-ECHO  [4/4] ☁️ Deploying to GitHub...
+:: 4. UPDATE ODDS
+echo.
+echo [4/5] 🎰 Fetching Latest Vegas Odds (04_update_features.py)...
+python 04_update_features.py
+if %errorlevel% neq 0 goto error
+
+:: 5. GENERATE PROJECTIONS
+echo.
+echo [5/5] 🔮 Recalculating Week %CURRENT_WEEK% Projections (05_make_projections.py)...
+python 05_make_projections.py
+if %errorlevel% neq 0 goto error
+
+:: --- CLOUD DEPLOYMENT (GIT) ---
+
+echo.
+echo ========================================================
+echo       ☁️  SYNCING HISTORY TO STREAMLIT CLOUD...
+echo ========================================================
+
+echo.
+echo 📦 Staging ALL Changes (DB + Code)...
 git add .
-set /p commit_msg="Enter Commit Message (e.g., Week 16 Update): "
-git commit -m "%commit_msg%"
 
-:: This pushes to the specific repo you linked in Step 1
+echo 📝 Committing Changes...
+git commit -m "Weekly Stats Update: %date% %time%"
+
+echo 🚀 Pushing to GitHub...
 git push origin main
-IF %ERRORLEVEL% NEQ 0 (
-    COLOR 0C
-    ECHO.
-    ECHO  ❌ CRITICAL ERROR: Git Push Failed.
-    ECHO  (Check your internet or GitHub credentials).
-    PAUSE
-    EXIT /B
-)
+if %errorlevel% neq 0 goto git_error
 
-ECHO.
-ECHO ---------------------------------------------------
-ECHO    🚀 SUCCESS! The Audible is live at:
-ECHO    https://the-audible.streamlit.app
-ECHO ---------------------------------------------------
-PAUSE
+echo.
+echo ========================================================
+echo   ✅ SUCCESS: Weekly history updated!
+echo ========================================================
+pause
+exit /b 0
+
+:error
+echo.
+echo ❌ CRITICAL PYTHON ERROR: A script failed. No data was pushed.
+pause
+exit /b 1
+
+:git_error
+echo.
+echo ❌ GIT ERROR: Could not push to GitHub.
+pause
+exit /b 1

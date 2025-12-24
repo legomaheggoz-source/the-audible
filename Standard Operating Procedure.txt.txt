@@ -1,0 +1,5 @@
+Day,Action,Script to Run
+Tuesday,1. Change config.py to NEW Week.2. Run Update.,RUN_WEEKLY_UPDATE.bat
+Wed - Sat,1. Run Update.,RUN_DAILY_UPDATE.bat
+Sunday,1. Run Snapshot (Pre-Kickoff).,RUN_SUNDAY_LOCK.bat
+Monday,🚫 No Action (Enjoy the games),None
